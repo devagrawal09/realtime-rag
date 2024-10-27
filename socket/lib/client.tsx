@@ -1,7 +1,16 @@
-import { from as rxFrom, mergeMap, Observable } from "rxjs";
-import { SerializedRef, WsMessage, WsMessageDown, WsMessageUp } from "./shared";
-import { getListener, onCleanup } from "solid-js";
+import { from as rxFrom, mergeMap, Observable, tap } from "rxjs";
+import {
+  createSeriazliedMemo,
+  SerializedMemo,
+  SerializedRef,
+  SerializedThing,
+  WsMessage,
+  WsMessageDown,
+  WsMessageUp,
+} from "./shared";
+import { createMemo, from, onCleanup } from "solid-js";
 import { createAsync } from "@solidjs/router";
+import { createLazyMemo } from "@solid-primitives/memo";
 
 const globalWsPromise = new Promise<SimpleWs>((resolve) => {
   const ws = new WebSocket("ws://localhost:3000/_ws");
@@ -49,8 +58,10 @@ function wsSub<T>(message: WsMessageUp, wsPromise: Promise<SimpleWs>) {
   return rxFrom(Promise.resolve(wsPromise)).pipe(
     mergeMap((ws) => {
       return new Observable<T>((obs) => {
+        console.log(`attaching sub handler`);
         function handler(event: { data: string }) {
           const data = JSON.parse(event.data) as WsMessage<WsMessageDown<T>>;
+          console.log(`data`, data, id);
           if (data.id === id) obs.next(data.value);
         }
 
@@ -59,15 +70,21 @@ function wsSub<T>(message: WsMessageUp, wsPromise: Promise<SimpleWs>) {
           JSON.stringify({ ...message, id } satisfies WsMessage<WsMessageUp>)
         );
 
-        return () => ws.removeEventListener("message", handler);
+        return () => {
+          console.log(`detaching sub handler`);
+          ws.removeEventListener("message", handler);
+        };
       });
     })
   );
 }
 
-function refToFn(ref: SerializedRef, wsPromise: Promise<SimpleWs>) {
-  return (input) =>
-    wsRpc(
+export function createRef<I, O>(
+  ref: SerializedRef,
+  wsPromise: Promise<SimpleWs>
+) {
+  return (input: I) =>
+    wsRpc<O>(
       {
         type: "invoke",
         ref,
@@ -77,13 +94,64 @@ function refToFn(ref: SerializedRef, wsPromise: Promise<SimpleWs>) {
     ).then(({ value }) => value);
 }
 
+export function createSocketMemoConsumer<O>(
+  ref: SerializedMemo,
+  wsPromise: Promise<SimpleWs>
+) {
+  console.log({ ref });
+  const memo = createLazyMemo(
+    () =>
+      from(
+        wsSub<O>(
+          {
+            type: "subscribe",
+            ref,
+          },
+          wsPromise
+        )
+      ),
+    ref.initial
+  );
+
+  return () => {
+    const memoValue = memo()();
+    console.log({ memoValue });
+    return memoValue;
+  };
+}
+
+type SerializedValue = SerializedThing | Record<string, SerializedThing>;
+
+const deserializeValue = (value: SerializedValue) => {
+  if (value.__type === "ref") {
+    return createRef(value, globalWsPromise);
+  } else if (value.__type === "memo") {
+    return createSocketMemoConsumer(value, globalWsPromise);
+  } else {
+    return Object.entries(value).reduce((res, [name, value]) => {
+      return {
+        ...res,
+        [name]:
+          value.__type === "ref"
+            ? createRef(value, globalWsPromise)
+            : value.__type === "memo"
+            ? createSocketMemoConsumer(value, globalWsPromise)
+            : value,
+      };
+    }, {} as any);
+  }
+};
+
 export function createEndpoint(
   name: string,
-  input: any,
+  input?: any,
   wsPromise = globalWsPromise
 ) {
-  const scopePromise = wsRpc<SerializedRef | Record<string, SerializedRef>>(
-    { type: "create", name },
+  const serializedInput =
+    input?.type === "memo" ? createSeriazliedMemo(input) : input;
+
+  const scopePromise = wsRpc<SerializedValue>(
+    { type: "create", name, input: serializedInput },
     wsPromise
   );
 
@@ -92,27 +160,16 @@ export function createEndpoint(
     scopePromise.then(({ dispose }) => dispose());
   });
 
-  const scopeValue = scopePromise.then(({ value }) => {
-    if (value.__type === "ref") {
-      return refToFn(value as SerializedRef, wsPromise);
-    } else {
-      return Object.entries(value).reduce((res, [name, value]) => {
-        return {
-          ...res,
-          [name]: value.__type === "ref" ? refToFn(value, wsPromise) : value,
-        };
-      }, {});
-    }
-  });
-
-  onCleanup(() => {
-    scopePromise.then(({ dispose }) => dispose());
-  });
-
-  return createAsync(() =>
-    scopeValue.then((d) => {
-      console.log({ d });
-      return d;
-    })
+  const scope = createAsync(() => scopePromise);
+  const deserializedScope = createMemo(
+    () => scope() && deserializeValue(scope()!.value)
   );
+
+  return new Proxy((() => {}) as any, {
+    get(_, path) {
+      const res = deserializedScope()?.[path];
+      console.log(`get`, path, res);
+      return res || (() => {});
+    },
+  });
 }

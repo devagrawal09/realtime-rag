@@ -24,8 +24,7 @@ export type WsMessageUp<I = any> =
     }
   | {
       type: "subscribe";
-      ref: SerializedRef;
-      input?: I;
+      ref: SerializedMemo;
     }
   | {
       type: "dispose";
@@ -36,9 +35,14 @@ export type WsMessageUp<I = any> =
       input?: I;
     };
 
-export type WsMessageDown<T> = {
-  value: T;
-};
+export type WsMessageDown<T> =
+  | {
+      value: T;
+    }
+  | {
+      type: "subscribe";
+      ref: SerializedMemo;
+    };
 
 export type SerializedRef<I = any, O = any> = {
   __type: "ref";
@@ -46,9 +50,24 @@ export type SerializedRef<I = any, O = any> = {
   scope: string;
 };
 
+export type SerializedMemo<O = any> = {
+  __type: "memo";
+  name: string;
+  scope: string;
+  initial: O;
+};
+
+export type SerializedThing = SerializedRef | SerializedMemo;
+
 export type SerializedStream<O = any> = {
   __type: "stream";
   name: string;
   scope: string;
   value: O;
 };
+
+export function createSeriazliedMemo(
+  opts: Omit<SerializedMemo, "__type">
+): SerializedMemo {
+  return { ...opts, __type: "memo" };
+}

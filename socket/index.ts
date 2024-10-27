@@ -2,6 +2,7 @@ import { normalize } from "vinxi/lib/path";
 export { client } from "./plugin/client";
 import { server } from "./plugin/server";
 import { fileURLToPath } from "url";
+import { importsPlugin } from "./imports";
 
 export const router = {
   name: "socket-fns",
@@ -17,5 +18,6 @@ export const router = {
         )
       ),
     }),
+    importsPlugin(),
   ],
 };
