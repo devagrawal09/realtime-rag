@@ -2,7 +2,7 @@ import { type RouteSectionProps } from "@solidjs/router";
 import { For, Show, createMemo, createSignal } from "solid-js";
 import { CompleteIcon, IncompleteIcon } from "~/components/icons";
 import { useTodos } from "~/lib/socket";
-import { Todo } from "~/types";
+import { createSocketMemo } from "../../socket/lib/shared";
 
 declare module "solid-js" {
   namespace JSX {
@@ -13,10 +13,13 @@ declare module "solid-js" {
 }
 
 export default function TodoApp(props: RouteSectionProps) {
-  const serverTodos = useTodos();
   const location = props.location;
+  const serverTodos = useTodos(
+    createSocketMemo(() => location.query.show as string)
+  );
 
   const [editingTodoId, setEditingId] = createSignal();
+
   const setEditing = ({
     id,
     pending,
@@ -26,17 +29,11 @@ export default function TodoApp(props: RouteSectionProps) {
   }) => {
     if (!pending || !pending()) setEditingId(id);
   };
+
   const remainingCount = createMemo(() => {
     const todos = serverTodos.todos() || [];
     return todos.filter((todo) => !todo.completed).length;
   });
-  const filterList = (todos: Todo[]) => {
-    if (location.query.show === "active")
-      return todos.filter((todo) => !todo.completed);
-    else if (location.query.show === "completed")
-      return todos.filter((todo) => todo.completed);
-    else return todos;
-  };
 
   let inputRef!: HTMLInputElement;
 
@@ -108,11 +105,11 @@ export default function TodoApp(props: RouteSectionProps) {
                       pending: pending(),
                     }}
                   >
-                    <form class="view" method="post">
+                    <div>
                       <button
-                        // formAction={toggleTodo.with(todo.id)}
                         class="toggle"
                         disabled={pending()}
+                        onClick={() => serverTodos.toggleTodo(todo.id)}
                       >
                         {completed() ? <CompleteIcon /> : <IncompleteIcon />}
                       </button>
@@ -125,11 +122,9 @@ export default function TodoApp(props: RouteSectionProps) {
                         // formAction={removeTodo.with(todo.id)}
                         class="destroy"
                       />
-                    </form>
+                    </div>
                     <Show when={editingTodoId() === todo.id}>
                       <form
-                        // action={editTodo.with(todo.id)}
-                        method="post"
                         onSubmit={(e) => {
                           e.preventDefault();
                           setTimeout(() => setEditing({}));
@@ -166,51 +161,48 @@ export default function TodoApp(props: RouteSectionProps) {
         </ul>
       </section>
 
-      <Show when={(serverTodos.todos() || []).length}>
-        <footer class="footer">
-          <span class="todo-count">
-            <strong>{remainingCount()}</strong>{" "}
-            {remainingCount() === 1 ? " item " : " items "} left
-          </span>
-          <ul class="filters">
-            <li>
-              <a
-                href="?show=all"
-                classList={{
-                  selected:
-                    !location.query.show || location.query.show === "all",
-                }}
-              >
-                All
-              </a>
-            </li>
-            <li>
-              <a
-                href="?show=active"
-                classList={{ selected: location.query.show === "active" }}
-              >
-                Active
-              </a>
-            </li>
-            <li>
-              <a
-                href="?show=completed"
-                classList={{ selected: location.query.show === "completed" }}
-              >
-                Completed
-              </a>
-            </li>
-          </ul>
-          <Show when={remainingCount() !== (serverTodos.todos() || []).length}>
-            <button
-              class="clear-completed"
-              onClick={(e) => serverTodos.clearCompleted()}
+      <footer class="footer">
+        <span class="todo-count">
+          <strong>{remainingCount()}</strong>{" "}
+          {remainingCount() === 1 ? " item " : " items "} left
+        </span>
+        <ul class="filters">
+          <li>
+            <a
+              href="?show=all"
+              classList={{
+                selected: !location.query.show || location.query.show === "all",
+              }}
             >
-              Clear completed
-            </button>
-          </Show>
-        </footer>
-      </Show>
+              All
+            </a>
+          </li>
+          <li>
+            <a
+              href="?show=active"
+              classList={{ selected: location.query.show === "active" }}
+            >
+              Active
+            </a>
+          </li>
+          <li>
+            <a
+              href="?show=completed"
+              classList={{ selected: location.query.show === "completed" }}
+            >
+              Completed
+            </a>
+          </li>
+        </ul>
+        <Show when={remainingCount() !== (serverTodos.todos() || []).length}>
+          <button
+            class="clear-completed"
+            onClick={(e) => serverTodos.clearCompleted()}
+          >
+            Clear completed
+          </button>
+        </Show>
+      </footer>
     </section>
   );
 }

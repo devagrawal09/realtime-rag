@@ -1,19 +1,3 @@
-import {
-  type Accessor,
-  onCleanup,
-  createSignal,
-  // @ts-expect-error
-} from "solid-js/dist/solid";
-
-export function from<T>(producer: {
-  subscribe: (fn: (v: T) => void) => { unsubscribe: () => void };
-}): Accessor<T | undefined> {
-  const [s, set] = createSignal<T | undefined>(undefined);
-  const sub = producer.subscribe(set);
-  onCleanup(() => sub.unsubscribe());
-  return s;
-}
-
 export type WsMessage<T> = T & { id: string };
 
 export type WsMessageUp<I = any> =
@@ -33,10 +17,15 @@ export type WsMessageUp<I = any> =
       type: "invoke";
       ref: SerializedRef;
       input?: I;
+    }
+  | {
+      type: "value";
+      value: I;
     };
 
 export type WsMessageDown<T> =
   | {
+      type: "value";
       value: T;
     }
   | {
@@ -70,4 +59,10 @@ export function createSeriazliedMemo(
   opts: Omit<SerializedMemo, "__type">
 ): SerializedMemo {
   return { ...opts, __type: "memo" };
+}
+
+export function createSocketMemo<T>(source: () => T): () => T | undefined {
+  // @ts-expect-error
+  source.type = "memo";
+  return source;
 }

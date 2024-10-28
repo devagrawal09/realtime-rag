@@ -1,7 +1,7 @@
 import { createFilter, FilterPattern } from "@rollup/pluginutils";
 import { Plugin } from "vite";
 
-export const DEFAULT_INCLUDE = "src/**/*.{jsx,tsx,ts,js,mjs,cjs}";
+export const DEFAULT_INCLUDE = "{src,socket}/**/*.{jsx,tsx,ts,js,mjs,cjs}";
 export const DEFAULT_EXCLUDE = "node_modules/**/*.{jsx,tsx,ts,js,mjs,cjs}";
 
 export function getFileName(_filename: string): string {

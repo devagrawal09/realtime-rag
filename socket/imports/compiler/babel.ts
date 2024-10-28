@@ -2,7 +2,16 @@
 import * as babel from "@babel/core";
 import { ImportPluginOptions } from ".";
 
-const specificImports = ["createSignal", "createEffect"];
+const specificImports = [
+  "createMemo",
+  "createRoot",
+  "createSignal",
+  "createEffect",
+  "from",
+  "observable",
+  "untrack",
+  "onCleanup",
+];
 
 export function createTransform$(opts?: ImportPluginOptions) {
   return function transform$({

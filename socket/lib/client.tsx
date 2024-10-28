@@ -8,7 +8,15 @@ import {
   WsMessageDown,
   WsMessageUp,
 } from "./shared";
-import { createMemo, from, onCleanup } from "solid-js";
+import {
+  createEffect,
+  createMemo,
+  from,
+  getOwner,
+  onCleanup,
+  runWithOwner,
+  untrack,
+} from "solid-js";
 import { createAsync } from "@solidjs/router";
 import { createLazyMemo } from "@solid-primitives/memo";
 
@@ -39,7 +47,7 @@ function wsRpc<T>(message: WsMessageUp, wsPromise: Promise<SimpleWs>) {
     function handler(event: { data: string }) {
       // console.log(`handler ${id}`, message, { data: event.data });
       const data = JSON.parse(event.data) as WsMessage<WsMessageDown<T>>;
-      if (data.id === id) {
+      if (data.id === id && data.type === "value") {
         res({ value: data.value, dispose });
         ws.removeEventListener("message", handler);
       }
@@ -58,11 +66,11 @@ function wsSub<T>(message: WsMessageUp, wsPromise: Promise<SimpleWs>) {
   return rxFrom(Promise.resolve(wsPromise)).pipe(
     mergeMap((ws) => {
       return new Observable<T>((obs) => {
-        console.log(`attaching sub handler`);
+        // console.log(`attaching sub handler`);
         function handler(event: { data: string }) {
           const data = JSON.parse(event.data) as WsMessage<WsMessageDown<T>>;
-          console.log(`data`, data, id);
-          if (data.id === id) obs.next(data.value);
+          // console.log(`data`, data, id);
+          if (data.id === id && data.type === "value") obs.next(data.value);
         }
 
         ws.addEventListener("message", handler);
@@ -71,7 +79,7 @@ function wsSub<T>(message: WsMessageUp, wsPromise: Promise<SimpleWs>) {
         );
 
         return () => {
-          console.log(`detaching sub handler`);
+          // console.log(`detaching sub handler`);
           ws.removeEventListener("message", handler);
         };
       });
@@ -98,7 +106,7 @@ export function createSocketMemoConsumer<O>(
   ref: SerializedMemo,
   wsPromise: Promise<SimpleWs>
 ) {
-  console.log({ ref });
+  // console.log({ ref });
   const memo = createLazyMemo(
     () =>
       from(
@@ -110,12 +118,12 @@ export function createSocketMemoConsumer<O>(
           wsPromise
         )
       ),
-    ref.initial
+    () => ref.initial
   );
 
   return () => {
     const memoValue = memo()();
-    console.log({ memoValue });
+    // console.log({ memoValue });
     return memoValue;
   };
 }
@@ -147,16 +155,58 @@ export function createEndpoint(
   input?: any,
   wsPromise = globalWsPromise
 ) {
+  const inputScope = crypto.randomUUID();
   const serializedInput =
-    input?.type === "memo" ? createSeriazliedMemo(input) : input;
+    input?.type === "memo"
+      ? createSeriazliedMemo({
+          name: `input`,
+          scope: inputScope,
+          initial: untrack(input),
+        })
+      : input;
+  console.log({ serializedInput });
 
   const scopePromise = wsRpc<SerializedValue>(
     { type: "create", name, input: serializedInput },
     wsPromise
   );
 
+  const o = getOwner();
+  if (input?.type === "memo") {
+    console.log(`listening for subscriptions on input memo`);
+    wsPromise.then((ws) => {
+      runWithOwner(o, () => {
+        console.log(`listening for subscriptions on input memo`);
+
+        function handler(event: { data: string }) {
+          const data = JSON.parse(event.data) as WsMessage<WsMessageDown<any>>;
+
+          if (data.type === "subscribe" && data.ref.scope === inputScope) {
+            runWithOwner(o, () => {
+              console.log(`server subscribed to input`);
+
+              createEffect(() => {
+                const value = input();
+                console.log(`sending input update to server`, value);
+                ws.send(
+                  JSON.stringify({
+                    type: "value",
+                    id: data.id,
+                    value,
+                  } satisfies WsMessage<WsMessageUp>)
+                );
+              });
+            });
+          }
+        }
+        ws.addEventListener("message", handler);
+        onCleanup(() => ws.removeEventListener("message", handler));
+      });
+    });
+  }
+
   onCleanup(() => {
-    console.log(`cleanup endpoint`);
+    // console.log(`cleanup endpoint`);
     scopePromise.then(({ dispose }) => dispose());
   });
 
@@ -168,7 +218,7 @@ export function createEndpoint(
   return new Proxy((() => {}) as any, {
     get(_, path) {
       const res = deserializedScope()?.[path];
-      console.log(`get`, path, res);
+      // console.log(`get`, path, res);
       return res || (() => {});
     },
   });
