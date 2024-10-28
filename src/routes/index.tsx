@@ -1,22 +1,14 @@
 import { type RouteSectionProps } from "@solidjs/router";
-import { For, Show, createMemo, createSignal } from "solid-js";
+import { For, Show, createSignal } from "solid-js";
 import { CompleteIcon, IncompleteIcon } from "~/components/icons";
-import { useTodos } from "~/lib/socket";
+import { type TodosFilter, useTodos } from "~/lib/socket";
 import { createSocketMemo } from "../../socket/lib/shared";
 
-declare module "solid-js" {
-  namespace JSX {
-    interface Directives {
-      setFocus: true;
-    }
-  }
-}
-
 export default function TodoApp(props: RouteSectionProps) {
-  const location = props.location;
-  const serverTodos = useTodos(
-    createSocketMemo(() => location.query.show as string)
+  const filter = createSocketMemo(
+    () => props.location.query.show as TodosFilter
   );
+  const serverTodos = useTodos(filter);
 
   const [editingTodoId, setEditingId] = createSignal();
 
@@ -29,12 +21,6 @@ export default function TodoApp(props: RouteSectionProps) {
   }) => {
     if (!pending || !pending()) setEditingId(id);
   };
-
-  const remainingCount = createMemo(() => {
-    const todos = serverTodos.todos() || [];
-    return todos.filter((todo) => !todo.completed).length;
-  });
-
   let inputRef!: HTMLInputElement;
 
   return (
@@ -64,8 +50,12 @@ export default function TodoApp(props: RouteSectionProps) {
       <section class="main">
         <Show when={(serverTodos.todos()?.length || 0) > 0}>
           <button
-            class={`toggle-all ${!remainingCount() ? "checked" : ""}`}
-            onClick={() => serverTodos.toggleAll(!!remainingCount())}
+            class={`toggle-all ${
+              !serverTodos.remainingCount() ? "checked" : ""
+            }`}
+            onClick={() =>
+              serverTodos.toggleAll(!!serverTodos.remainingCount())
+            }
           >
             ❯
           </button>
@@ -73,106 +63,66 @@ export default function TodoApp(props: RouteSectionProps) {
         <ul class="todo-list">
           <For each={serverTodos.todos()}>
             {(todo) => {
-              // const togglingTodo = useSubmission(
-              //   toggleTodo,
-              //   (input) => input[0] == todo.id
-              // );
-              // const editingTodo = useSubmission(
-              //   editTodo,
-              //   (input) => input[0] == todo.id
-              // );
-              const title = () => todo.title;
-              //   editingTodo.pending ? editingTodo.input[0] : todo.title;
-              const pending = () => false;
-              //   togglingAll.pending ||
-              //   togglingTodo.pending ||
-              //   editingTodo.pending;
-              const completed = () => todo.completed;
-              //   togglingAll.pending
-              //     ? !togglingAll.input[0]
-              //     : togglingTodo.pending
-              //     ? !todo.completed
-              //     : todo.completed;
-              const removing = () => false;
-              // removingTodo.some((data) => data.input[0] === todo.id);
               return (
-                <Show when={!removing()}>
-                  <li
-                    class="todo"
-                    classList={{
-                      editing: editingTodoId() === todo.id,
-                      completed: completed(),
-                      pending: pending(),
-                    }}
-                  >
-                    <div>
-                      <button
-                        class="toggle"
-                        disabled={pending()}
-                        onClick={() => serverTodos.toggleTodo(todo.id)}
-                      >
-                        {completed() ? <CompleteIcon /> : <IncompleteIcon />}
-                      </button>
-                      <label
-                        onDblClick={[setEditing, { id: todo.id, pending }]}
-                      >
-                        {title()}
-                      </label>
-                      <button
-                        // formAction={removeTodo.with(todo.id)}
-                        class="destroy"
-                      />
-                    </div>
-                    <Show when={editingTodoId() === todo.id}>
-                      <form
-                        onSubmit={(e) => {
-                          e.preventDefault();
-                          setTimeout(() => setEditing({}));
+                <li
+                  class="todo"
+                  classList={{
+                    editing: editingTodoId() === todo.id,
+                    completed: todo.completed,
+                  }}
+                >
+                  <div>
+                    <button
+                      class="toggle"
+                      onClick={() => serverTodos.toggleTodo(todo.id)}
+                    >
+                      {todo.completed ? <CompleteIcon /> : <IncompleteIcon />}
+                    </button>
+                    <label onDblClick={() => setEditing({ id: todo.id })}>
+                      {todo.title}
+                    </label>
+                    <button class="destroy" />
+                  </div>
+                  <Show when={editingTodoId() === todo.id}>
+                    <form
+                      onSubmit={(e) => {
+                        e.preventDefault();
+                        const title = new FormData(e.currentTarget).get(
+                          "title"
+                        ) as string;
+                        serverTodos.editTodo({ id: todo.id, title });
+                        setEditing({});
+                      }}
+                    >
+                      <input
+                        name="title"
+                        class="edit"
+                        value={todo.title}
+                        onBlur={(e) => {
+                          if (todo.title !== e.currentTarget.value) {
+                            e.currentTarget.form!.requestSubmit();
+                          } else setEditing({});
                         }}
-                      >
-                        <input
-                          name="title"
-                          class="edit"
-                          value={todo.title}
-                          onBlur={(e) => {
-                            if (todo.title !== e.currentTarget.value) {
-                              e.currentTarget.form!.requestSubmit();
-                            } else setTimeout(() => setEditing({}));
-                          }}
-                          use:setFocus
-                        />
-                      </form>
-                    </Show>
-                  </li>
-                </Show>
+                      />
+                    </form>
+                  </Show>
+                </li>
               );
             }}
           </For>
-          {/* <For each={addingTodo}>
-            {(sub) => (
-              <li class="todo pending">
-                <div class="view">
-                  <label>{String(sub.input[0].get("title"))}</label>
-                  <button disabled class="destroy" />
-                </div>
-              </li>
-            )}
-          </For> */}
         </ul>
       </section>
 
       <footer class="footer">
         <span class="todo-count">
-          <strong>{remainingCount()}</strong>{" "}
-          {remainingCount() === 1 ? " item " : " items "} left
+          <strong>{serverTodos.remainingCount()}</strong>{" "}
+          {serverTodos.remainingCount() === 1 ? " item " : " items "} left
         </span>
         <ul class="filters">
           <li>
             <a
               href="?show=all"
-              classList={{
-                selected: !location.query.show || location.query.show === "all",
-              }}
+              classList={{ selected: !filter() || filter() === "all" }}
             >
               All
             </a>
@@ -180,7 +130,7 @@ export default function TodoApp(props: RouteSectionProps) {
           <li>
             <a
               href="?show=active"
-              classList={{ selected: location.query.show === "active" }}
+              classList={{ selected: filter() === "active" }}
             >
               Active
             </a>
@@ -188,16 +138,16 @@ export default function TodoApp(props: RouteSectionProps) {
           <li>
             <a
               href="?show=completed"
-              classList={{ selected: location.query.show === "completed" }}
+              classList={{ selected: filter() === "completed" }}
             >
               Completed
             </a>
           </li>
         </ul>
-        <Show when={remainingCount() !== (serverTodos.todos() || []).length}>
+        <Show when={serverTodos.remainingCount() !== serverTodos.totalCount()}>
           <button
             class="clear-completed"
-            onClick={(e) => serverTodos.clearCompleted()}
+            onClick={() => serverTodos.clearCompleted()}
           >
             Clear completed
           </button>

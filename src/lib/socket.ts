@@ -31,32 +31,44 @@ async function toggleTodo(id: number) {
   );
 }
 
+async function editTodo({ id, title }: { id: number; title: string }) {
+  return setTodos(
+    todos().map((todo) => (todo.id === id ? { ...todo, title } : todo))
+  );
+}
+
 createEffect(() => {
-  // console.log(`todos`, todos());
+  console.log(`todos`, todos());
 });
 
-export const useTodos = (filter: () => string | undefined) => {
-  createEffect(() => console.log(`location`, filter()));
+const remainingCount = createSocketMemo(
+  () => todos().filter((todo) => !todo.completed).length
+);
 
-  const filteredTodos = () => {
-    const f = filter();
-    const t = todos();
-    console.log({ f });
+const totalCount = createSocketMemo(() => todos().length);
 
-    if (f === "active") return t.filter((todo) => !todo.completed);
-    else if (f === "completed") return t.filter((todo) => todo.completed);
-    else return t;
-  };
+export type TodosFilter = "all" | "active" | "completed" | undefined;
+
+export const useTodos = (filter: () => TodosFilter) => {
+  createEffect(() => console.log(`filter`, filter()));
+
+  const filteredTodos = createSocketMemo(() => {
+    if (filter() === "active") return todos().filter((todo) => !todo.completed);
+
+    if (filter() === "completed")
+      return todos().filter((todo) => todo.completed);
+
+    return todos();
+  });
 
   return {
-    todos: createSocketMemo(() => {
-      const f = filteredTodos();
-      console.log({ f });
-      return f;
-    }),
+    todos: filteredTodos,
+    totalCount,
+    remainingCount,
     addTodo,
     toggleAll,
     clearCompleted,
     toggleTodo,
+    editTodo,
   };
 };
