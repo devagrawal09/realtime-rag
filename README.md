@@ -6,9 +6,12 @@ This repo implements the classic TodoMVC app using Solid Socket. Most of the sta
 
 ## Getting Started
 
-1. `git clone repo`
-2. `npm install`
-3. `npm run dev`
+``` bash
+git clone https://github.com/devagrawal09/solid-socket
+cd solid-socket
+npm install
+npm run dev
+```
 
 ## APIs
 
