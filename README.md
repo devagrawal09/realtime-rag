@@ -1,30 +1,74 @@
-# SolidStart
+# Solid Socket
 
-Everything you need to build a Solid project, powered by [`solid-start`](https://start.solidjs.com);
+Signals meets WebSockets.
 
-## Creating a project
+This repo implements the classic TodoMVC app using Solid Socket. Most of the state and logic lives on the server, and the client communicates with it over websockets.
 
-```bash
-# create a new project in the current directory
-npm init solid@latest
+## Getting Started
 
-# create a new project in my-app
-npm init solid@latest my-app
+1. `git clone repo`
+2. `npm install`
+3. `npm run dev`
+
+## APIs
+
+### `"use socket"`
+
+Use this directive on top of a file to define **socket functions**. A **socket function** is a function exported from a file marked as `"use socket"`. This file will be split into a separate bundle that runs on the server. You can create global state in a `"use socket"` file through signals or any other stateful primitive.
+
+Socket functions work like hooks, and should be called inside Solid.js components. Calling a socket function can instantiate a stateful closure on the server, which is automatically cleaned up with the calling component.
+
+```tsx
+// src/lib/socket.tsx
+"use socket"
+
+export function useLogger() {
+  let i = 0
+
+  function logger() {
+    console.log(`Hello World!`, i++)
+  }
+  
+  return logger
+}
+
+// src/routes/index.tsx
+export default function IndexPage() {
+  const serverLogger = useLogger()
+
+  return <button onClick={() => serverLogger()}>Log</button>
+}
 ```
 
-## Developing
+Clicking the button will log the message on the server and increment the count for the next log.
 
-Once you've created a project and installed dependencies with `npm install` (or `pnpm install` or `yarn`), start a development server:
+### `"createSocketMemo"
 
-```bash
-npm run dev
+A **socket memo** is a signal that can be accessed on the other side of the network. It's a serializable/transportable reactive value. **Socket memos** can be used to share a reactive value from the client to the server, and the server to the client.
 
-# or start the server and open the app in a new browser tab
-npm run dev -- --open
+
+```tsx
+// src/lib/socket.tsx
+"use socket"
+
+export function useCounter() {
+  const [count, setCount] = createSignal()
+  return {
+    count: createSocketMemo(count),
+    setCount
+  }
+}
+
+// src/routes/index.tsx
+export default function Counter() {
+  const serverCounter = useCounter()
+
+  return <button
+    onClick={() => serverCounter.setCount(serverCounter.count() + 1)}
+  >
+    Count: {serverCounter.count()}
+  </button>
+}
 ```
 
-## Building
-
-Solid apps are built with _presets_, which optimise your project for deployment to different environments.
-
-By default, `npm run build` will generate a Node app that you can run with `npm start`. To use a different preset, add it to the `devDependencies` in `package.json` and specify in your `app.config.js`.
+The todos example in this repo shows how to use `createSocketMemo` to also share a signal from the client to the server.
