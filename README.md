@@ -84,6 +84,7 @@ This project is highly experimental and you might run into issues building with 
 - If socket functions are not called within components or reactive roots, they will never be cleaned up from the server. Only call socket functions from roots.
 - Socket functions can return functions, memos, or objects whose shallow properties are functions or memos. Deeply nested properties that are functions or memos won't be serialized and might throw an error instead.
 - The input to a socket function can either be a serializable object or a memo. It cannot be a function or an object with properties that are functions or memos.
+- Third party packages that use Solid's signals might not work yet.
 
 ### Roadmap
 - More demos
