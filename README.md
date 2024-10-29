@@ -75,9 +75,16 @@ The todos example in this repo shows how to use `createSocketMemo` to also share
 
 ## Status
 
-This project is highly experimental and you might run into issues building with this. Please report any issues you might find and leave feedback for things you'd like to see!
+This project is highly experimental and you might run into issues building with this. Please report any issues you might find and leave feedback for things you'd like to see!.
 
 ### Known Limitations
 - If socket functions are not called within components or reactive roots, they will never be cleaned up from the server. Only call socket functions from roots.
 - Socket functions can return functions, memos, or objects whose shallow properties are functions or memos. Deeply nested properties that are functions or memos won't be serialized and might throw an error instead.
 - The input to a socket function can either be a serializable object or a memo. It cannot be a function or an object with properties that are functions or memos.
+
+### Roadmap
+- More demos
+- `createSocketProjection`
+- Integration with `solid-events`
+- Address above limitations
+- Package as an npm module
