@@ -164,7 +164,7 @@ export function createEndpoint(
           initial: untrack(input),
         })
       : input;
-  console.log({ serializedInput });
+  // console.log({ serializedInput });
 
   const scopePromise = wsRpc<SerializedValue>(
     { type: "create", name, input: serializedInput },
@@ -173,21 +173,21 @@ export function createEndpoint(
 
   const o = getOwner();
   if (input?.type === "memo") {
-    console.log(`listening for subscriptions on input memo`);
+    // console.log(`listening for subscriptions on input memo`);
     wsPromise.then((ws) => {
       runWithOwner(o, () => {
-        console.log(`listening for subscriptions on input memo`);
+        // console.log(`listening for subscriptions on input memo`);
 
         function handler(event: { data: string }) {
           const data = JSON.parse(event.data) as WsMessage<WsMessageDown<any>>;
 
           if (data.type === "subscribe" && data.ref.scope === inputScope) {
             runWithOwner(o, () => {
-              console.log(`server subscribed to input`);
+              // console.log(`server subscribed to input`);
 
               createEffect(() => {
                 const value = input();
-                console.log(`sending input update to server`, value);
+                // console.log(`sending input update to server`, value);
                 ws.send(
                   JSON.stringify({
                     type: "value",

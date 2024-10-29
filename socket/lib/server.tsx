@@ -61,7 +61,6 @@ export class LiveSolidServer {
     }
 
     if (message.type === "value") {
-      console.log({ message });
       this.observers.get(message.id)?.(message.value);
     }
   }
@@ -167,7 +166,7 @@ export class LiveSolidServer {
 
   cleanup() {
     for (const [key, closure] of this.closures.entries()) {
-      console.log(`Disposing ${key}`);
+      // console.log(`Disposing ${key}`);
       closure.disposal();
       this.closures.delete(key);
     }

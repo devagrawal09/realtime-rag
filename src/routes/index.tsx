@@ -33,8 +33,7 @@ export default function TodoApp(props: RouteSectionProps) {
             if (!inputRef.value.trim()) e.preventDefault();
             setTimeout(() => (inputRef.value = ""));
             const title = new FormData(e.currentTarget).get("title") as string;
-            const newTodos = await serverTodos.addTodo(title);
-            console.log(newTodos);
+            await serverTodos.addTodo(title);
           }}
         >
           <input
