@@ -218,8 +218,11 @@ export function createEndpoint(
   return new Proxy((() => {}) as any, {
     get(_, path) {
       const res = deserializedScope()?.[path];
-      // console.log(`get`, path, res);
       return res || (() => {});
+    },
+    apply(_, __, args) {
+      const res = deserializedScope()?.(...args);
+      return res;
     },
   });
 }
