@@ -29,8 +29,6 @@ export type TodoEvent = TodoCreated | TodoToggled | TodoEdited | TodoDeleted;
 
 const [todoLogs, setTodoLogs] = createServerLog<TodoEvent>();
 
-export type TodosFilter = "all" | "active" | "completed" | undefined;
-
 export const useServerTodos = () => {
   const { userId = `123` } = useCookies<{ userId?: string }>();
   const { serverEvents, appendEvent } = createServerEventLog(

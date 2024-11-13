@@ -8,7 +8,7 @@ import {
   createSignal,
 } from "solid-js";
 import { CompleteIcon, IncompleteIcon } from "~/components/icons";
-import { type TodosFilter, useServerTodos } from "~/lib/todos";
+import { useServerTodos } from "~/lib/todos";
 import { createSocketMemo } from "../../socket/lib/shared";
 import {
   createPositionToElement,
@@ -25,6 +25,8 @@ import {
 } from "../../socket/events";
 import { PresenceUser, usePresence } from "~/lib/presence";
 import { useCounter } from "~/lib/counter";
+
+type TodosFilter = "all" | "active" | "completed" | undefined;
 
 export type Todo = {
   id: number;
@@ -61,7 +63,7 @@ export default function TodoApp(props: RouteSectionProps) {
     },
     [] as Todo[]
   );
-  ``;
+
   const filteredTodos = createMemo(() => {
     if (filter() === "active") return todos.filter((t) => !t.completed);
     if (filter() === "completed") return todos.filter((t) => t.completed);
