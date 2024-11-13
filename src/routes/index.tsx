@@ -4,13 +4,14 @@ import {
   Show,
   createComputed,
   createEffect,
+  createMemo,
   createSignal,
 } from "solid-js";
 import { CompleteIcon, IncompleteIcon } from "~/components/icons";
 import {
   type TodosFilter,
   usePresence,
-  useTodos,
+  useServerTodos,
   PresenceUser,
 } from "~/lib/socket";
 import { createSocketMemo } from "../../socket/lib/shared";
@@ -22,12 +23,97 @@ import { RiDevelopmentCursorLine } from "solid-icons/ri";
 import { createStore, reconcile } from "solid-js/store";
 import { debounce } from "@solid-primitives/scheduled";
 import { Tooltip } from "@kobalte/core/tooltip";
+import {
+  createEventComputed,
+  createClientEventLog,
+  createEventProjection,
+} from "../../socket/events";
+
+export type Todo = {
+  id: number;
+  title: string;
+  completed: boolean;
+};
 
 export default function TodoApp(props: RouteSectionProps) {
   const filter = createSocketMemo(
     () => props.location.query.show as TodosFilter
   );
-  const serverTodos = useTodos(filter);
+
+  const serverTodos = useServerTodos();
+  const { events, appendEvent } = createClientEventLog(serverTodos);
+  const todos = createEventProjection(
+    events,
+    (acc, e) => {
+      if (e.type === "todo-added") {
+        acc.push({ id: e.id, title: e.title, completed: false });
+      }
+      if (e.type === "todo-toggled") {
+        const todo = acc.find((t) => t.id === e.id);
+        if (todo) todo.completed = true;
+      }
+      if (e.type === "todo-deleted") {
+        const index = acc.findIndex((note) => note.id === e.id);
+        if (index !== -1) acc.splice(index, 1);
+      }
+      if (e.type === "todo-edited") {
+        const todo = acc.find((t) => t.id === e.id);
+        if (todo) todo.title = e.title;
+      }
+      return acc;
+    },
+    [] as Todo[]
+  );
+  const filteredTodos = createMemo(() => {
+    if (filter() === "active") return todos.filter((t) => !t.completed);
+    if (filter() === "completed") return todos.filter((t) => t.completed);
+    return todos;
+  });
+
+  const remainingCount = createEventComputed(
+    events,
+    (acc, e) => {
+      if (e.type === "todo-added") {
+        acc++;
+      }
+      if (e.type === "todo-toggled") {
+        acc--;
+      }
+      if (e.type === "todo-deleted") {
+        acc--;
+      }
+      return acc;
+    },
+    0
+  );
+
+  const totalCount = createEventComputed(
+    events,
+    (acc, e) => {
+      if (e.type === "todo-added") {
+        acc++;
+      }
+      if (e.type === "todo-deleted") {
+        acc--;
+      }
+      return acc;
+    },
+    0
+  );
+
+  const toggleAll = (completed: boolean) =>
+    Promise.all(
+      todos
+        .filter((t) => t.completed !== completed)
+        .map((t) => appendEvent({ type: "todo-toggled", id: t.id }))
+    );
+
+  const clearCompleted = () =>
+    Promise.all(
+      todos
+        .filter((t) => t.completed)
+        .map((t) => appendEvent({ type: "todo-deleted", id: t.id }))
+    );
 
   const [editingTodoId, setEditingId] = createSignal();
 
@@ -125,10 +211,16 @@ export default function TodoApp(props: RouteSectionProps) {
               e.preventDefault();
               if (!inputRef.value.trim()) e.preventDefault();
               setTimeout(() => (inputRef.value = ""));
-              const title = new FormData(e.currentTarget).get(
-                "title"
-              ) as string;
-              await serverTodos.addTodo(title);
+              const title = (
+                new FormData(e.currentTarget).get("title") as string
+              ).trim();
+
+              if (title.length)
+                await appendEvent({
+                  type: "todo-added",
+                  title,
+                  id: todos.length + 1,
+                });
             }}
           >
             <input
@@ -142,20 +234,16 @@ export default function TodoApp(props: RouteSectionProps) {
         </header>
 
         <section class="main">
-          <Show when={(serverTodos.todos()?.length || 0) > 0}>
+          <Show when={todos.length > 0}>
             <button
-              class={`toggle-all ${
-                !serverTodos.remainingCount() ? "checked" : ""
-              }`}
-              onClick={() =>
-                serverTodos.toggleAll(!!serverTodos.remainingCount())
-              }
+              class={`toggle-all ${remainingCount() ? "checked" : ""}`}
+              onClick={() => toggleAll(!!remainingCount())}
             >
               ❯
             </button>
           </Show>
           <ul class="todo-list">
-            <For each={serverTodos.todos()}>
+            <For each={filteredTodos()}>
               {(todo) => {
                 return (
                   <li
@@ -168,14 +256,21 @@ export default function TodoApp(props: RouteSectionProps) {
                     <div>
                       <button
                         class="toggle"
-                        onClick={() => serverTodos.toggleTodo(todo.id)}
+                        onClick={() =>
+                          appendEvent({ type: "todo-toggled", id: todo.id })
+                        }
                       >
                         {todo.completed ? <CompleteIcon /> : <IncompleteIcon />}
                       </button>
                       <label onDblClick={() => setEditing({ id: todo.id })}>
                         {todo.title}
                       </label>
-                      <button class="destroy" />
+                      <button
+                        class="destroy"
+                        onClick={() =>
+                          appendEvent({ type: "todo-deleted", id: todo.id })
+                        }
+                      />
                     </div>
                     <Show when={editingTodoId() === todo.id}>
                       <form
@@ -184,7 +279,11 @@ export default function TodoApp(props: RouteSectionProps) {
                           const title = new FormData(e.currentTarget).get(
                             "title"
                           ) as string;
-                          serverTodos.editTodo({ id: todo.id, title });
+                          appendEvent({
+                            type: "todo-edited",
+                            id: todo.id,
+                            title,
+                          });
                           setEditing({});
                         }}
                       >
@@ -209,8 +308,8 @@ export default function TodoApp(props: RouteSectionProps) {
 
         <footer class="footer">
           <span class="todo-count">
-            <strong>{serverTodos.remainingCount()}</strong>{" "}
-            {serverTodos.remainingCount() === 1 ? " item " : " items "} left
+            <strong>{remainingCount()}</strong>{" "}
+            {remainingCount() === 1 ? " item " : " items "} left
           </span>
           <ul class="filters">
             <li>
@@ -238,13 +337,8 @@ export default function TodoApp(props: RouteSectionProps) {
               </a>
             </li>
           </ul>
-          <Show
-            when={serverTodos.remainingCount() !== serverTodos.totalCount()}
-          >
-            <button
-              class="clear-completed"
-              onClick={() => serverTodos.clearCompleted()}
-            >
+          <Show when={remainingCount() !== totalCount()}>
+            <button class="clear-completed" onClick={() => clearCompleted()}>
               Clear completed
             </button>
           </Show>

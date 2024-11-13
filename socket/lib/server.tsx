@@ -34,7 +34,7 @@ export const usePeer = () => {
 export function useCookies<T = Record<string, string>>() {
   const peer = usePeer();
   // @ts-expect-error
-  return parseCookie(peer.headers.cookie) as T;
+  return (peer.headers.cookie ? parseCookie(peer.headers.cookie) : {}) as T;
 }
 
 export type Callable<T> = (arg: unknown) => T | Promise<T>;

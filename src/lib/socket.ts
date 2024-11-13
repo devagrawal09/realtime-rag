@@ -1,7 +1,6 @@
 "use socket";
 
 import { createEffect, createMemo, createSignal, onCleanup } from "solid-js";
-import { Todo } from "~/types";
 import { createSocketMemo } from "../../socket/lib/shared";
 import {
   uniqueNamesGenerator,
@@ -9,68 +8,45 @@ import {
   colors,
   animals,
 } from "unique-names-generator";
+import {
+  createServerLog,
+  createServerEventLog,
+} from "../../socket/events/socket";
+import { useCookies } from "../../socket/lib/server";
 
-const [todos, setTodos] = createSignal<Todo[]>([]);
+export type TodoCreated = {
+  type: "todo-added";
+  id: number;
+  title: string;
+};
+export type TodoToggled = {
+  type: "todo-toggled";
+  id: number;
+};
+export type TodoEdited = {
+  type: "todo-edited";
+  id: number;
+  title: string;
+};
+export type TodoDeleted = {
+  type: "todo-deleted";
+  id: number;
+};
+export type TodoEvent = TodoCreated | TodoToggled | TodoEdited | TodoDeleted;
 
-async function addTodo(title: string) {
-  const todo: Todo = {
-    id: todos().length + 1,
-    title,
-    completed: false,
-  };
-  return setTodos([...todos(), todo]);
-}
-
-async function toggleAll(completed: boolean) {
-  return setTodos(todos().map((todo) => ({ ...todo, completed })));
-}
-
-async function clearCompleted() {
-  return setTodos(todos().filter((todo) => !todo.completed));
-}
-
-async function toggleTodo(id: number) {
-  return setTodos(
-    todos().map((todo) =>
-      todo.id === id ? { ...todo, completed: !todo.completed } : todo
-    )
-  );
-}
-
-async function editTodo({ id, title }: { id: number; title: string }) {
-  return setTodos(
-    todos().map((todo) => (todo.id === id ? { ...todo, title } : todo))
-  );
-}
-
-const remainingCount = createSocketMemo(
-  () => todos().filter((todo) => !todo.completed).length
-);
-
-const totalCount = createSocketMemo(() => todos().length);
+const [todoLogs, setTodoLogs] = createServerLog<TodoEvent>();
 
 export type TodosFilter = "all" | "active" | "completed" | undefined;
 
-export const useTodos = (filter: () => TodosFilter) => {
-  const filteredTodos = createSocketMemo(() => {
-    if (filter() === "active") return todos().filter((todo) => !todo.completed);
+export const useServerTodos = () => {
+  const { userId = `123` } = useCookies<{ userId?: string }>();
+  const { serverEvents, appendEvent } = createServerEventLog(
+    () => userId,
+    todoLogs,
+    setTodoLogs
+  );
 
-    if (filter() === "completed")
-      return todos().filter((todo) => todo.completed);
-
-    return todos();
-  });
-
-  return {
-    todos: filteredTodos,
-    totalCount,
-    remainingCount,
-    addTodo,
-    toggleAll,
-    clearCompleted,
-    toggleTodo,
-    editTodo,
-  };
+  return { serverEvents: createSocketMemo(serverEvents), appendEvent };
 };
 
 export type PresenceUser = {
