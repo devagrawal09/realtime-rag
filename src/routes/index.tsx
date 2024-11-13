@@ -8,12 +8,7 @@ import {
   createSignal,
 } from "solid-js";
 import { CompleteIcon, IncompleteIcon } from "~/components/icons";
-import {
-  type TodosFilter,
-  usePresence,
-  useServerTodos,
-  PresenceUser,
-} from "~/lib/socket";
+import { type TodosFilter, useServerTodos } from "~/lib/todos";
 import { createSocketMemo } from "../../socket/lib/shared";
 import {
   createPositionToElement,
@@ -28,6 +23,8 @@ import {
   createClientEventLog,
   createEventProjection,
 } from "../../socket/events";
+import { PresenceUser, usePresence } from "~/lib/presence";
+import { useCounter } from "~/lib/counter";
 
 export type Todo = {
   id: number;
@@ -64,6 +61,7 @@ export default function TodoApp(props: RouteSectionProps) {
     },
     [] as Todo[]
   );
+  ``;
   const filteredTodos = createMemo(() => {
     if (filter() === "active") return todos.filter((t) => !t.completed);
     if (filter() === "completed") return todos.filter((t) => t.completed);
@@ -137,6 +135,8 @@ export default function TodoApp(props: RouteSectionProps) {
   createComputed(() =>
     setPresenceStore(reconcile(Object.values(users() || {})))
   );
+
+  const counter = useCounter();
 
   return (
     <div>
@@ -214,13 +214,10 @@ export default function TodoApp(props: RouteSectionProps) {
               const title = (
                 new FormData(e.currentTarget).get("title") as string
               ).trim();
+              const id = todos.length + 1;
 
               if (title.length)
-                await appendEvent({
-                  type: "todo-added",
-                  title,
-                  id: todos.length + 1,
-                });
+                await appendEvent({ type: "todo-added", title, id });
             }}
           >
             <input
@@ -344,6 +341,29 @@ export default function TodoApp(props: RouteSectionProps) {
           </Show>
         </footer>
       </section>
+
+      <div>
+        Counter: {counter.count()}
+        <br />
+        <button
+          style={{
+            padding: "5px",
+            color: "white",
+            "background-color": "green",
+          }}
+          onClick={() => (console.log(`incr`), counter.increment())}
+        >
+          Increment
+        </button>
+        <br />
+        <button
+          style={{ padding: "5px", color: "white", "background-color": "red" }}
+          onClick={() => (console.log(`decr`), counter.decrement())}
+        >
+          Decrement
+        </button>
+        <br />
+      </div>
     </div>
   );
 }
