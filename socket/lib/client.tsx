@@ -27,7 +27,9 @@ import { createLazyMemo } from "@solid-primitives/memo";
 import { createCallback } from "@solid-primitives/rootless";
 
 const globalWsPromise = new Promise<SimpleWs>((resolve) => {
-  const ws = new WebSocket("ws://localhost:3000/_ws");
+  const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
+  const wsUrl = `${protocol}://${window.location.hostname}:${window.location.port}/_ws`;
+  const ws = new WebSocket(wsUrl);
   ws.onopen = () => resolve(ws);
 });
 
@@ -199,10 +201,10 @@ export function createEndpoint(
   const serializedInput =
     input?.type === "memo"
       ? createSeriazliedMemo({
-          name: `input`,
-          scope: inputScope,
-          initial: untrack(input),
-        })
+        name: `input`,
+        scope: inputScope,
+        initial: untrack(input),
+      })
       : input;
   // console.log({ serializedInput });
 
@@ -256,10 +258,9 @@ export function createEndpoint(
     () => scope() && deserializeValue(scope()!.value)
   );
 
-  return new Proxy((() => {}) as any, {
+  return new Proxy((() => { }) as any, {
     get(_, path) {
       const res = deserializedScope()?.[path];
-      // console.log(path, res);
       return res || (() => {});
     },
     apply(_, __, args) {
