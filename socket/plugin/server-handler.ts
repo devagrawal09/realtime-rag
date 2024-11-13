@@ -1,6 +1,7 @@
-import { eventHandler } from "vinxi/http";
+import { eventHandler, getSession } from "vinxi/http";
 import { LiveSolidServer } from "../lib/server";
 import { WsMessage, WsMessageUp } from "../lib/shared";
+import { setTimeout } from "timers/promises";
 
 const clients = new Map<string, LiveSolidServer>();
 
@@ -10,10 +11,11 @@ export default eventHandler({
     open(peer) {
       clients.set(peer.id, new LiveSolidServer(peer));
     },
-    message(peer, e) {
+    async message(peer, e) {
       const message = JSON.parse(e.text()) as WsMessage<WsMessageUp>;
       const client = clients.get(peer.id);
       if (!client) return;
+      await setTimeout(1000);
       client.handleMessage(message);
     },
     async close(peer) {

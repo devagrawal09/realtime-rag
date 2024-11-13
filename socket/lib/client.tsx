@@ -1,24 +1,30 @@
-import { from as rxFrom, mergeMap, Observable, tap } from "rxjs";
+import { from as rxFrom, mergeMap, Observable } from "rxjs";
 import {
   createSeriazliedMemo,
   SerializedMemo,
+  SerializedProjection,
   SerializedRef,
+  SerializedStoreAccessor,
   SerializedThing,
   WsMessage,
   WsMessageDown,
   WsMessageUp,
 } from "./shared";
 import {
+  Accessor,
+  createComputed,
   createEffect,
   createMemo,
+  createSignal,
   from,
+  getListener,
   getOwner,
   onCleanup,
-  runWithOwner,
   untrack,
 } from "solid-js";
 import { createAsync } from "@solidjs/router";
 import { createLazyMemo } from "@solid-primitives/memo";
+import { createCallback } from "@solid-primitives/rootless";
 
 const globalWsPromise = new Promise<SimpleWs>((resolve) => {
   const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
@@ -93,7 +99,7 @@ export function createRef<I, O>(
   ref: SerializedRef,
   wsPromise: Promise<SimpleWs>
 ) {
-  return (input: I) =>
+  return (...input: any[]) =>
     wsRpc<O>(
       {
         type: "invoke",
@@ -130,6 +136,34 @@ export function createSocketMemoConsumer<O>(
   };
 }
 
+export function createSocketProjectionConsumer<O extends object>(
+  ref: SerializedProjection<O> | SerializedStoreAccessor<O>,
+  wsPromise: Promise<SimpleWs>
+) {
+  console.log({ ref });
+
+  const nodes = [] as { path: string; accessor: Accessor<any> }[];
+
+  function getNode(path: string) {
+    const node = nodes.find((node) => node.path === path);
+    if (node) return node;
+    const newNode = {
+      path,
+      accessor: from(wsSub<O>({ type: "subscribe", ref, path }, wsPromise)),
+    };
+    nodes.push(newNode);
+    return newNode;
+  }
+
+  return new Proxy<O>(ref.initial!, {
+    get(target, path: string) {
+      return getListener()
+        ? getNode(path).accessor()
+        : ((target as any)[path] as O);
+    },
+  });
+}
+
 type SerializedValue = SerializedThing | Record<string, SerializedThing>;
 
 const deserializeValue = (value: SerializedValue) => {
@@ -137,6 +171,8 @@ const deserializeValue = (value: SerializedValue) => {
     return createRef(value, globalWsPromise);
   } else if (value.__type === "memo") {
     return createSocketMemoConsumer(value, globalWsPromise);
+  } else if (value.__type === "projection") {
+    return createSocketProjectionConsumer(value, globalWsPromise);
   } else {
     return Object.entries(value).reduce((res, [name, value]) => {
       return {
@@ -145,8 +181,12 @@ const deserializeValue = (value: SerializedValue) => {
           value.__type === "ref"
             ? createRef(value, globalWsPromise)
             : value.__type === "memo"
-              ? createSocketMemoConsumer(value, globalWsPromise)
-              : value,
+            ? createSocketMemoConsumer(value, globalWsPromise)
+            : value.__type === "projection"
+            ? createSocketProjectionConsumer(value, globalWsPromise)
+            : value.__type === "store-accessor"
+            ? createSocketProjectionConsumer(value, globalWsPromise)
+            : value,
       };
     }, {} as any);
   }
@@ -173,38 +213,39 @@ export function createEndpoint(
     wsPromise
   );
 
-  const o = getOwner();
   if (input?.type === "memo") {
-    // console.log(`listening for subscriptions on input memo`);
-    wsPromise.then((ws) => {
-      runWithOwner(o, () => {
-        // console.log(`listening for subscriptions on input memo`);
+    const [inputSignal, setInput] = createSignal(input());
+    createComputed(() => setInput(input()));
 
-        function handler(event: { data: string }) {
-          const data = JSON.parse(event.data) as WsMessage<WsMessageDown<any>>;
+    const onSubscribe = createCallback(
+      (ws: SimpleWs, data: WsMessage<WsMessageDown<any>>) => {
+        createEffect(() => {
+          const value = inputSignal();
+          // console.log(`sending input update to server`, value, input);
+          ws.send(
+            JSON.stringify({
+              type: "value",
+              id: data.id,
+              value,
+            } satisfies WsMessage<WsMessageUp>)
+          );
+        });
+      }
+    );
 
-          if (data.type === "subscribe" && data.ref.scope === inputScope) {
-            runWithOwner(o, () => {
-              // console.log(`server subscribed to input`);
+    const onWs = createCallback((ws: SimpleWs) => {
+      function handler(event: { data: string }) {
+        const data = JSON.parse(event.data) as WsMessage<WsMessageDown<any>>;
 
-              createEffect(() => {
-                const value = input();
-                // console.log(`sending input update to server`, value);
-                ws.send(
-                  JSON.stringify({
-                    type: "value",
-                    id: data.id,
-                    value,
-                  } satisfies WsMessage<WsMessageUp>)
-                );
-              });
-            });
-          }
+        if (data.type === "subscribe" && data.ref.scope === inputScope) {
+          onSubscribe(ws, data);
         }
-        ws.addEventListener("message", handler);
-        onCleanup(() => ws.removeEventListener("message", handler));
-      });
+      }
+      ws.addEventListener("message", handler);
+      onCleanup(() => ws.removeEventListener("message", handler));
     });
+
+    wsPromise.then(onWs);
   }
 
   onCleanup(() => {
@@ -220,7 +261,7 @@ export function createEndpoint(
   return new Proxy((() => { }) as any, {
     get(_, path) {
       const res = deserializedScope()?.[path];
-      return res || (() => { });
+      return res || (() => {});
     },
     apply(_, __, args) {
       const res = deserializedScope()?.(...args);

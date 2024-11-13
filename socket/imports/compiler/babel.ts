@@ -2,7 +2,7 @@
 import * as babel from "@babel/core";
 import { ImportPluginOptions } from ".";
 
-const specificImports = [
+const specificRootImports = [
   "createMemo",
   "createRoot",
   "createSignal",
@@ -12,6 +12,8 @@ const specificImports = [
   "untrack",
   "onCleanup",
 ];
+
+const specificStoreImports = ["createStore", "produce"];
 
 export function createTransform$(opts?: ImportPluginOptions) {
   return function transform$({
@@ -28,17 +30,40 @@ export function createTransform$(opts?: ImportPluginOptions) {
             const specificSpecifiers = path.node.specifiers.filter(
               (specifier) =>
                 t.isImportSpecifier(specifier) &&
-                specificImports.includes((specifier.imported as any).name)
+                specificRootImports.includes((specifier.imported as any).name)
             );
             const otherSpecifiers = path.node.specifiers.filter(
               (specifier) =>
                 t.isImportSpecifier(specifier) &&
-                !specificImports.includes((specifier.imported as any).name)
+                !specificRootImports.includes((specifier.imported as any).name)
             );
             if (specificSpecifiers.length > 0) {
               const newImportDeclaration = t.importDeclaration(
                 specificSpecifiers,
                 t.stringLiteral("solid-js/dist/solid.cjs")
+              );
+              path.insertAfter(newImportDeclaration);
+              if (otherSpecifiers.length > 0) {
+                path.node.specifiers = otherSpecifiers;
+              } else {
+                path.remove();
+              }
+            }
+          } else if (path.node.source.value === "solid-js/store") {
+            const specificSpecifiers = path.node.specifiers.filter(
+              (specifier) =>
+                t.isImportSpecifier(specifier) &&
+                specificStoreImports.includes((specifier.imported as any).name)
+            );
+            const otherSpecifiers = path.node.specifiers.filter(
+              (specifier) =>
+                t.isImportSpecifier(specifier) &&
+                !specificStoreImports.includes((specifier.imported as any).name)
+            );
+            if (specificSpecifiers.length > 0) {
+              const newImportDeclaration = t.importDeclaration(
+                specificSpecifiers,
+                t.stringLiteral("solid-js/store/dist/store")
               );
               path.insertAfter(newImportDeclaration);
               if (otherSpecifiers.length > 0) {
@@ -72,7 +97,12 @@ export async function compilepImports(
     });
     if (transformed) {
       if (opts?.log) {
-        console.log(id, transformed.code);
+        console.log(
+          `\n`,
+          id,
+          `\n`,
+          transformed.code?.split(`\n`).splice(0, 10).join(`\n`)
+        );
       }
       return {
         code: transformed.code ?? "",
