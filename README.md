@@ -101,7 +101,7 @@ export default function Page() {
   const [configKeys, setConfigKeys] = createSignal(['name'])
 
   return <For each={configKeys}>
-    {key => <span>{key()}: {configKeys()[key]}</span>}
+    {key => <span>{key()}: {serverConfig()[key]}</span>}
   </For>
 }
 ```
@@ -137,7 +137,7 @@ export default function Page() {
   const [configKeys, setConfigKeys] = createSignal(['name'])
 
   return <For each={configKeys}>
-    {key => <span>{key()}: {configKeys()[key]}</span>}
+    {key => <span>{key()}: {serverConfig()[key]}</span>}
   </For>
 }
 ```
