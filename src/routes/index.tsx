@@ -1,4 +1,9 @@
-import { type RouteSectionProps } from "@solidjs/router";
+import {
+  action,
+  cache,
+  createAsync,
+  type RouteSectionProps,
+} from "@solidjs/router";
 import {
   For,
   Show,
@@ -25,6 +30,7 @@ import {
 } from "../../socket/events";
 import { PresenceUser, usePresence } from "~/lib/presence";
 import { useCounter } from "~/lib/counter";
+import { deleteCookie, getCookie, setCookie } from "vinxi/http";
 
 type TodosFilter = "all" | "active" | "completed" | undefined;
 
@@ -34,11 +40,56 @@ export type Todo = {
   completed: boolean;
 };
 
-export default function TodoApp(props: RouteSectionProps) {
-  const filter = createSocketMemo(
-    () => props.location.query.show as TodosFilter
-  );
+const getUserId = cache(async () => {
+  "use server";
 
+  const userId = getCookie(`userId`);
+  console.log(`http`, { userId });
+
+  return userId;
+}, `user`);
+
+const login = action(async (formData: FormData) => {
+  "use server";
+
+  const userId = formData.get("userId") as string;
+  setCookie(`userId`, userId);
+  console.log(`userId set`, userId);
+
+  return userId;
+}, `login`);
+
+const logout = action(async () => {
+  "use server";
+
+  deleteCookie(`userId`);
+}, `logout`);
+
+function TodoApp(props: { filter: TodosFilter }) {
+  const filter = createSocketMemo(() => props.filter);
+
+  const [editingTodoId, setEditingId] = createSignal();
+
+  const setEditing = ({
+    id,
+    pending,
+  }: {
+    id?: number;
+    pending?: () => boolean;
+  }) => {
+    if (!pending || !pending()) setEditingId(id);
+  };
+  let inputRef!: HTMLInputElement;
+
+  let ref: HTMLElement | undefined;
+  const users = usePresence(
+    createSocketMemo(createDebouncedMousePos(() => ref))
+  );
+  const [presenceStore, setPresenceStore] = createStore<PresenceUser[]>([]);
+
+  createComputed(() =>
+    setPresenceStore(reconcile(Object.values(users() || {})))
+  );
   const serverTodos = useServerTodos();
   const { events, appendEvent } = createClientEventLog(serverTodos);
   const todos = createEventProjection(
@@ -49,7 +100,7 @@ export default function TodoApp(props: RouteSectionProps) {
       }
       if (e.type === "todo-toggled") {
         const todo = acc.find((t) => t.id === e.id);
-        if (todo) todo.completed = true;
+        if (todo) todo.completed = !todo.completed;
       }
       if (e.type === "todo-deleted") {
         const index = acc.findIndex((note) => note.id === e.id);
@@ -70,21 +121,21 @@ export default function TodoApp(props: RouteSectionProps) {
     return todos;
   });
 
-  const remainingCount = createEventComputed(
+  const remainingTodos = createEventProjection(
     events,
     (acc, e) => {
       if (e.type === "todo-added") {
-        acc++;
+        acc.push(e.id);
       }
       if (e.type === "todo-toggled") {
-        acc--;
+        acc.includes(e.id) ? acc.splice(acc.indexOf(e.id), 1) : acc.push(e.id);
       }
       if (e.type === "todo-deleted") {
-        acc--;
+        acc.includes(e.id) && acc.splice(acc.indexOf(e.id), 1);
       }
       return acc;
     },
-    0
+    [] as number[]
   );
 
   const totalCount = createEventComputed(
@@ -115,33 +166,8 @@ export default function TodoApp(props: RouteSectionProps) {
         .map((t) => appendEvent({ type: "todo-deleted", id: t.id }))
     );
 
-  const [editingTodoId, setEditingId] = createSignal();
-
-  const setEditing = ({
-    id,
-    pending,
-  }: {
-    id?: number;
-    pending?: () => boolean;
-  }) => {
-    if (!pending || !pending()) setEditingId(id);
-  };
-  let inputRef!: HTMLInputElement;
-
-  let ref: HTMLElement | undefined;
-  const users = usePresence(
-    createSocketMemo(createDebouncedMousePos(() => ref))
-  );
-  const [presenceStore, setPresenceStore] = createStore<PresenceUser[]>([]);
-
-  createComputed(() =>
-    setPresenceStore(reconcile(Object.values(users() || {})))
-  );
-
-  const counter = useCounter();
-
   return (
-    <div>
+    <>
       <div style={{ "text-align": "right", height: "0", padding: "5px 0" }}>
         <For each={presenceStore}>
           {(user) => {
@@ -235,8 +261,8 @@ export default function TodoApp(props: RouteSectionProps) {
         <section class="main">
           <Show when={todos.length > 0}>
             <button
-              class={`toggle-all ${remainingCount() ? "checked" : ""}`}
-              onClick={() => toggleAll(!!remainingCount())}
+              class={`toggle-all ${remainingTodos.length ? "checked" : ""}`}
+              onClick={() => toggleAll(!!remainingTodos.length)}
             >
               ❯
             </button>
@@ -256,18 +282,25 @@ export default function TodoApp(props: RouteSectionProps) {
                       <button
                         class="toggle"
                         onClick={() =>
-                          appendEvent({ type: "todo-toggled", id: todo.id })
+                          appendEvent({
+                            type: "todo-toggled",
+                            id: todo.id,
+                          })
                         }
                       >
                         {todo.completed ? <CompleteIcon /> : <IncompleteIcon />}
                       </button>
+
                       <label onDblClick={() => setEditing({ id: todo.id })}>
                         {todo.title}
                       </label>
                       <button
                         class="destroy"
                         onClick={() =>
-                          appendEvent({ type: "todo-deleted", id: todo.id })
+                          appendEvent({
+                            type: "todo-deleted",
+                            id: todo.id,
+                          })
                         }
                       />
                     </div>
@@ -307,14 +340,16 @@ export default function TodoApp(props: RouteSectionProps) {
 
         <footer class="footer">
           <span class="todo-count">
-            <strong>{remainingCount()}</strong>{" "}
-            {remainingCount() === 1 ? " item " : " items "} left
+            <strong>{remainingTodos.length}</strong>{" "}
+            {remainingTodos.length === 1 ? " item " : " items "} left
           </span>
           <ul class="filters">
             <li>
               <a
                 href="?show=all"
-                classList={{ selected: !filter() || filter() === "all" }}
+                classList={{
+                  selected: !filter() || filter() === "all",
+                }}
               >
                 All
               </a>
@@ -336,36 +371,77 @@ export default function TodoApp(props: RouteSectionProps) {
               </a>
             </li>
           </ul>
-          <Show when={remainingCount() !== totalCount()}>
+          <Show when={remainingTodos.length !== totalCount()}>
             <button class="clear-completed" onClick={() => clearCompleted()}>
               Clear completed
             </button>
           </Show>
         </footer>
       </section>
+    </>
+  );
+}
 
-      <div>
-        Counter: {counter.count()}
-        <br />
-        <button
-          style={{
-            padding: "5px",
-            color: "white",
-            "background-color": "green",
-          }}
-          onClick={() => (console.log(`incr`), counter.increment())}
-        >
-          Increment
-        </button>
-        <br />
-        <button
-          style={{ padding: "5px", color: "white", "background-color": "red" }}
-          onClick={() => (console.log(`decr`), counter.decrement())}
-        >
-          Decrement
-        </button>
-        <br />
-      </div>
+export default function TodoAppPage(props: RouteSectionProps) {
+  const userId = createAsync(() => getUserId());
+
+  return (
+    <div>
+      <Show
+        when={userId()}
+        fallback={
+          <>
+            {/* Login screen with a username input and submit button */}
+            <form
+              action={login}
+              method="post"
+              style={{
+                "text-align": "center",
+                "margin-top": "100px",
+                "font-size": "20px",
+              }}
+            >
+              <input
+                type="text"
+                name="userId"
+                style={{
+                  "background-color": "#f2f2f2",
+                  border: "1px solid grey",
+                  "border-radius": "5px",
+                  color: "black",
+                  padding: "15px 32px",
+                  "text-align": "center",
+                  "text-decoration": "none",
+                  display: "inline-block",
+                  "font-size": "16px",
+                  margin: "4px 2px",
+                }}
+                placeholder="Username"
+              />
+              <button
+                type="submit"
+                style={{
+                  "background-color": "#4CAF50",
+                  border: "none",
+                  "border-radius": "5px",
+                  color: "white",
+                  padding: "15px 32px",
+                  "text-align": "center",
+                  "text-decoration": "none",
+                  display: "inline-block",
+                  "font-size": "16px",
+                  margin: "4px 2px",
+                  cursor: "pointer",
+                }}
+              >
+                Login
+              </button>
+            </form>
+          </>
+        }
+      >
+        <TodoApp filter={props.location.query.show as TodosFilter} />
+      </Show>
     </div>
   );
 }
@@ -386,4 +462,32 @@ function createDebouncedMousePos(ref: () => HTMLElement | undefined) {
     x && y && trigger({ x, y });
   });
   return debouncedPos;
+}
+
+function Counter() {
+  const counter = useCounter();
+  return (
+    <div>
+      Counter: {counter.count()}
+      <br />
+      <button
+        style={{
+          padding: "5px",
+          color: "white",
+          "background-color": "green",
+        }}
+        onClick={() => (console.log(`incr`), counter.increment())}
+      >
+        Increment
+      </button>
+      <br />
+      <button
+        style={{ padding: "5px", color: "white", "background-color": "red" }}
+        onClick={() => (console.log(`decr`), counter.decrement())}
+      >
+        Decrement
+      </button>
+      <br />
+    </div>
+  );
 }

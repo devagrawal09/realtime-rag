@@ -31,10 +31,23 @@ export const usePeer = () => {
   return peer;
 };
 
-export function useCookies<T = Record<string, string>>() {
+export function useCookies<T extends object = Record<string, string>>() {
   const peer = usePeer();
-  // @ts-expect-error
-  return (peer.headers.cookie ? parseCookie(peer.headers.cookie) : {}) as T;
+
+  let parsedCookies: T;
+  const getParsedCookies = () => {
+    if (parsedCookies) return parsedCookies;
+    // @ts-expect-error
+    return (parsedCookies = parseCookie(peer.headers.cookie || ``) as T);
+  };
+
+  return new Proxy({} as T, {
+    get(_, path: string) {
+      const cookies = getParsedCookies();
+      // @ts-expect-error
+      return cookies[path];
+    },
+  });
 }
 
 export type Callable<T> = (arg: unknown) => T | Promise<T>;

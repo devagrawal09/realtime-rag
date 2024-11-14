@@ -1,11 +1,11 @@
 "use socket";
 
-import {
-  createServerLog,
-  createServerEventLog,
-} from "../../socket/events/socket";
+import { createServerEventLog } from "../../socket/events/socket";
 import { useCookies } from "../../socket/lib/server";
 import { createSocketMemo } from "../../socket/lib/shared";
+import { EventLog } from "../../socket/events";
+import { createPersistedSignal } from "../../socket/persisted";
+import { storage } from "./db";
 
 export type TodoCreated = {
   type: "todo-added";
@@ -27,15 +27,21 @@ export type TodoDeleted = {
 };
 export type TodoEvent = TodoCreated | TodoToggled | TodoEdited | TodoDeleted;
 
-const [todoLogs, setTodoLogs] = createServerLog<TodoEvent>();
+const [todoLogs, setTodoLogs] = createPersistedSignal<
+  Record<string, EventLog<TodoEvent>>
+>(storage, `todos-logs`, {});
 
 export const useServerTodos = () => {
-  const { userId = `123` } = useCookies<{ userId?: string }>();
+  const cookies = useCookies<{ userId?: string }>();
+
   const { serverEvents, appendEvent } = createServerEventLog(
-    () => userId,
+    () => cookies.userId,
     todoLogs,
     setTodoLogs
   );
 
-  return { serverEvents: createSocketMemo(serverEvents), appendEvent };
+  return {
+    serverEvents: createSocketMemo(serverEvents),
+    appendEvent,
+  };
 };

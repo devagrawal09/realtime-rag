@@ -6,6 +6,7 @@ dist
 .netlify
 netlify
 .vinxi
+tmp
 
 # Environment
 .env
