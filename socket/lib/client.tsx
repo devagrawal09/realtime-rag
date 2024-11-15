@@ -137,7 +137,7 @@ export function createSocketProjectionConsumer<O extends object>(
     return newNode;
   }
 
-  return new Proxy<O>(ref.initial!, {
+  return new Proxy<O>(ref.initial || {}, {
     get(target, path: string) {
       return getListener()
         ? getNode(path).accessor()

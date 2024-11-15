@@ -8,6 +8,7 @@ import {
   colors,
   animals,
 } from "unique-names-generator";
+import { useCookies } from "../../socket/lib/server";
 
 export type PresenceUser = {
   name: string;
@@ -16,12 +17,14 @@ export type PresenceUser = {
   color: string;
 };
 
-const [users, setUsers] = createSignal<Record<string, PresenceUser>>({});
+const [presenceDocs, setPresence] = createSignal<
+  Record<string, Record<string, PresenceUser>>
+>({});
 
 export const usePresence = (
-  mousePos: () => { x: number; y: number } | undefined
+  mousePos: () => { docId?: string; x: number; y: number } | undefined
 ) => {
-  const id = crypto.randomUUID();
+  const { userId } = useCookies();
   const color = Math.floor(Math.random() * 16777215).toString(16);
   const name = uniqueNamesGenerator({
     dictionaries: [adjectives, colors, animals],
@@ -30,16 +33,32 @@ export const usePresence = (
   });
 
   createEffect(() => {
-    const { x, y } = mousePos() || {};
-    x && y && setUsers((u) => ({ ...u, [id]: { name, x, y, color } }));
+    const { docId = userId, x, y } = mousePos() || {};
+    console.log({
+      userId,
+      docId,
+      x,
+      y,
+    });
+    x &&
+      y &&
+      setPresence((prev) => ({
+        ...prev,
+        [docId]: { ...prev[docId], [userId]: { name, x, y, color } },
+      }));
   });
 
   onCleanup(() => {
-    setUsers(({ [id]: _, ...rest }) => rest);
+    const { docId = userId } = mousePos() || {};
+    setPresence((prev) => {
+      const { [userId]: _, ...rest } = prev[docId];
+      return { ...prev, [docId]: rest };
+    });
   });
 
   const otherUsers = createMemo(() => {
-    const { [id]: _, ...rest } = users();
+    const { [userId]: _, ...rest } =
+      presenceDocs()[mousePos()?.docId || userId] || {};
     return rest;
   });
 

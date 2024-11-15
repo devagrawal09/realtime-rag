@@ -1,42 +1,35 @@
-import { A, createAsync, type RouteSectionProps } from "@solidjs/router";
-import {
-  For,
-  Show,
-  createComputed,
-  createEffect,
-  createMemo,
-  createSignal,
-} from "solid-js";
-import { CompleteIcon, IncompleteIcon } from "~/components/icons";
-import { useServerTodos } from "~/lib/todos";
-import { createSocketMemo } from "../../socket/lib/shared";
-import {
-  createPositionToElement,
-  useMousePosition,
-} from "@solid-primitives/mouse";
-import { RiDevelopmentCursorLine } from "solid-icons/ri";
-import { createStore, reconcile } from "solid-js/store";
-import { debounce } from "@solid-primitives/scheduled";
 import { Tooltip } from "@kobalte/core/tooltip";
 import {
-  createEventComputed,
+  useMousePosition,
+  createPositionToElement,
+} from "@solid-primitives/mouse";
+import { RouteSectionProps, createAsync, useNavigate } from "@solidjs/router";
+import { RiDevelopmentCursorLine } from "solid-icons/ri";
+import {
+  createSignal,
+  createComputed,
+  createMemo,
+  createEffect,
+  For,
+  Show,
+} from "solid-js";
+import { createStore, reconcile } from "solid-js/store";
+import { CompleteIcon, IncompleteIcon } from "~/components/icons";
+import { useInvites } from "~/lib/todos";
+import { usePresence, PresenceUser } from "~/lib/presence";
+import { useServerTodos } from "~/lib/todos";
+import { Todo, TodosFilter } from ".";
+import {
   createClientEventLog,
   createEventProjection,
+  createEventComputed,
 } from "../../socket/events";
-import { PresenceUser, usePresence } from "~/lib/presence";
-import { useInvites } from "~/lib/todos";
-import { getUserId, login } from "~/lib/auth";
+import { createSocketMemo } from "../../socket/lib/shared";
+import { debounce } from "@solid-primitives/scheduled";
+import { getUserId } from "~/lib/auth";
 
-export type TodosFilter = "all" | "active" | "completed" | undefined;
-
-export type Todo = {
-  id: number;
-  title: string;
-  completed: boolean;
-};
-
-function TodoApp(props: { filter: TodosFilter }) {
-  const filter = createSocketMemo(() => props.filter);
+function TodoApp(props: { filter: TodosFilter; listId: string }) {
+  const filter = () => props.filter;
 
   const [editingTodoId, setEditingId] = createSignal();
 
@@ -52,15 +45,16 @@ function TodoApp(props: { filter: TodosFilter }) {
   let inputRef!: HTMLInputElement;
 
   let ref: HTMLElement | undefined;
+  const mousePos = createDebouncedMousePos(() => ref);
   const users = usePresence(
-    createSocketMemo(createDebouncedMousePos(() => ref))
+    createSocketMemo(() => ({ docId: props.listId, ...mousePos() }))
   );
   const [presenceStore, setPresenceStore] = createStore<PresenceUser[]>([]);
 
   createComputed(() =>
     setPresenceStore(reconcile(Object.values(users() || {})))
   );
-  const serverTodos = useServerTodos();
+  const serverTodos = useServerTodos(createSocketMemo(() => props.listId));
   const { events, appendEvent } = createClientEventLog(serverTodos);
   const todos = createEventProjection(
     events,
@@ -137,6 +131,8 @@ function TodoApp(props: { filter: TodosFilter }) {
     );
 
   const serverInvites = useInvites();
+
+  createEffect(() => console.log(`invites`, serverInvites.inviteds));
 
   return (
     <>
@@ -350,141 +346,17 @@ function TodoApp(props: { filter: TodosFilter }) {
           </Show>
         </footer>
       </section>
-      <div
-        style={{
-          "text-align": "center",
-          "margin-top": "100px",
-          "font-size": "20px",
-        }}
-      >
-        <p>Invite someone to your list!</p>
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            serverInvites.addInvite(
-              new FormData(e.currentTarget).get("invite") as string
-            );
-          }}
-        >
-          <input
-            placeholder="Username"
-            name="invite"
-            style={{
-              "background-color": "#f2f2f2",
-              border: "1px solid grey",
-              "border-radius": "5px",
-              color: "black",
-              padding: "15px 32px",
-              "text-align": "center",
-              "text-decoration": "none",
-              display: "inline-block",
-              "font-size": "16px",
-              margin: "4px 2px",
-            }}
-          />
-        </form>
-        <Show when={serverInvites.inviteds()?.length}>
-          <h4>Invited</h4>
-          <For each={serverInvites.inviteds() || []}>
-            {(invite) => (
-              <div>
-                {invite}
-                <button
-                  onClick={() => serverInvites.removeInvite(invite)}
-                  style={{
-                    "background-color": "#4CAF50",
-                    border: "none",
-                    "border-radius": "5px",
-                    color: "white",
-                    padding: "15px 32px",
-                    "text-align": "center",
-                    "text-decoration": "none",
-                    display: "inline-block",
-                    "font-size": "16px",
-                    margin: "4px 2px",
-                    cursor: "pointer",
-                  }}
-                >
-                  Remove
-                </button>
-              </div>
-            )}
-          </For>
-        </Show>
-        <Show when={serverInvites.invites()?.length}>
-          <h4>Invites</h4>
-          <For each={serverInvites.invites() || []}>
-            {(invite) => (
-              <div>
-                <A href={`/${invite}`}>{invite}</A>
-              </div>
-            )}
-          </For>
-        </Show>
-      </div>
     </>
   );
 }
 
 export default function TodoAppPage(props: RouteSectionProps) {
-  const userId = createAsync(() => getUserId());
-
   return (
     <div>
-      <Show
-        when={userId()}
-        fallback={
-          <>
-            <form
-              action={login}
-              method="post"
-              style={{
-                "text-align": "center",
-                "margin-top": "100px",
-                "font-size": "20px",
-              }}
-            >
-              <input
-                type="text"
-                name="userId"
-                style={{
-                  "background-color": "#f2f2f2",
-                  border: "1px solid grey",
-                  "border-radius": "5px",
-                  color: "black",
-                  padding: "15px 32px",
-                  "text-align": "center",
-                  "text-decoration": "none",
-                  display: "inline-block",
-                  "font-size": "16px",
-                  margin: "4px 2px",
-                }}
-                placeholder="Username"
-              />
-              <button
-                type="submit"
-                style={{
-                  "background-color": "#4CAF50",
-                  border: "none",
-                  "border-radius": "5px",
-                  color: "white",
-                  padding: "15px 32px",
-                  "text-align": "center",
-                  "text-decoration": "none",
-                  display: "inline-block",
-                  "font-size": "16px",
-                  margin: "4px 2px",
-                  cursor: "pointer",
-                }}
-              >
-                Login
-              </button>
-            </form>
-          </>
-        }
-      >
-        <TodoApp filter={props.location.query.show as TodosFilter} />
-      </Show>
+      <TodoApp
+        filter={props.location.query.show as TodosFilter}
+        listId={props.params.userId}
+      />
     </div>
   );
 }
@@ -495,7 +367,10 @@ function createDebouncedMousePos(ref: () => HTMLElement | undefined) {
   const [debouncedPos, setDebouncedPos] = createSignal<{
     x: number;
     y: number;
-  }>();
+  }>({
+    x: 0,
+    y: 0,
+  });
   const trigger = debounce(
     (pos: { x: number; y: number }) => setDebouncedPos(pos),
     5
