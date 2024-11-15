@@ -17,10 +17,15 @@ Solid Socket also provides some powerful utilities that enable
 ## Demo
 
 The demo is the classic TodoMVC application but enhanced to highlight realtime capabilities of Solid-Socket.
+
 You can log in to the app using just a username, and invite other users to collaborate on your todo list.
+
 The todo list itself features realtime sync and instant optimistic updates, along with user presence indicators to show who else is currently looking at the list.
+
 Cookie based auth ensures that a user can only see their own list as well as the lists they have been invited to.
+
 The todo list and invite data is persisted in a reactive key-value store.
+
 While the demo is deployed on a single-instance Railway server, it can be easily scaled out horizontally, and the reactive KV persistance will ensure data is synced across every live server.
 
 Take it for a spin at [solid-socket-production.up.railway.app](https://solid-socket-production.up.railway.app/).

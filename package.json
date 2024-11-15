@@ -1,11 +1,13 @@
 {
-  "name": "live-todos",
+  "name": "solid-socket",
   "type": "module",
+  "description": "Signals meets WebSockets",
   "scripts": {
     "dev": "vinxi dev",
     "build": "vinxi build",
     "start": "vinxi start"
   },
+  "author": "Dev Agrawal <devagrawal09@gmail.com> (http://devagr.me/)",
   "dependencies": {
     "@kobalte/core": "^0.13.7",
     "@solid-primitives/memo": "^1.3.9",
