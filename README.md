@@ -2,9 +2,28 @@
 
 Signals meets WebSockets.
 
-This repo implements the classic TodoMVC app using Solid Socket. Most of the state and logic lives on the server, and the client communicates with it over websockets.
+Solid-Socket is an extension to SolidStart which adds realtime websocket capabilities over familiar signal based APIs.
 
-Demo: [solid-socket-production.up.railway.app](https://solid-socket-production.up.railway.app/)
+Similar to `"use server"` in SolidStart, Solid-Socket adds a `"use socket"` which gets bundled and run in a stateful server, which means you have access to global state that lives as long as its host server, and any exported function get turned into RPC/Subscription calls over websockets.
+
+Solid Socket also provides some powerful utilities that enable
+
+- Two way reactive communication
+- Fine grained updates using stores
+- Sync engine with incremental projections
+- Reactive persistance and server sync
+- Cookie-based authentication
+
+## Demo
+
+The demo is the classic TodoMVC application but enhanced to highlight realtime capabilities of Solid-Socket.
+You can log in to the app using just a username, and invite other users to collaborate on your todo list.
+The todo list itself features realtime sync and instant optimistic updates, along with user presence indicators to show who else is currently looking at the list.
+Cookie based auth ensures that a user can only see their own list as well as the lists they have been invited to.
+The todo list and invite data is persisted in a reactive key-value store.
+While the demo is deployed on a single-instance Railway server, it can be easily scaled out horizontally, and the reactive KV persistance will ensure data is synced across every live server.
+
+Take it for a spin at [solid-socket-production.up.railway.app](https://solid-socket-production.up.railway.app/).
 
 ## Getting Started
 

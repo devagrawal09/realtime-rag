@@ -6,7 +6,6 @@ import { createSocketMemo } from "../../socket/lib/shared";
 import { EventLog } from "../../socket/events";
 import { createPersistedSignal } from "../../socket/persisted";
 import { storage } from "./db";
-import { createEffect } from "solid-js";
 
 export type TodoCreated = {
   type: "todo-added";

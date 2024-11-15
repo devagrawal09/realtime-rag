@@ -2,12 +2,6 @@
 
 import { createEffect, createMemo, createSignal, onCleanup } from "solid-js";
 import { createSocketMemo } from "../../socket/lib/shared";
-import {
-  uniqueNamesGenerator,
-  adjectives,
-  colors,
-  animals,
-} from "unique-names-generator";
 import { useCookies } from "../../socket/lib/server";
 
 export type PresenceUser = {
@@ -26,11 +20,6 @@ export const usePresence = (
 ) => {
   const { userId } = useCookies();
   const color = Math.floor(Math.random() * 16777215).toString(16);
-  const name = uniqueNamesGenerator({
-    dictionaries: [adjectives, colors, animals],
-    style: "capital",
-    separator: " ",
-  });
 
   createEffect(() => {
     const { docId = userId, x, y } = mousePos() || {};
@@ -38,7 +27,7 @@ export const usePresence = (
       y &&
       setPresence((prev) => ({
         ...prev,
-        [docId]: { ...prev[docId], [userId]: { name, x, y, color } },
+        [docId]: { ...prev[docId], [userId]: { name: userId, x, y, color } },
       }));
   });
 
@@ -51,8 +40,8 @@ export const usePresence = (
   });
 
   const otherUsers = createMemo(() => {
-    const { [userId]: _, ...rest } =
-      presenceDocs()[mousePos()?.docId || userId] || {};
+    const docId = mousePos()?.docId || userId;
+    const { [userId]: _, ...rest } = presenceDocs()[docId] || {};
     return rest;
   });
 

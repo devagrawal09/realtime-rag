@@ -122,8 +122,6 @@ export function createSocketMemoConsumer<O>(ref: SerializedMemo) {
 export function createSocketProjectionConsumer<O extends object>(
   ref: SerializedProjection<O> | SerializedStoreAccessor<O>
 ) {
-  console.log({ ref });
-
   const nodes = [] as { path: string; accessor: Accessor<any> }[];
 
   function getNode(path: string) {
@@ -137,6 +135,7 @@ export function createSocketProjectionConsumer<O extends object>(
     return newNode;
   }
 
+  // @ts-expect-error
   return new Proxy<O>(ref.initial || {}, {
     get(target, path: string) {
       return getListener()
