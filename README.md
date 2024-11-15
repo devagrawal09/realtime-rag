@@ -4,6 +4,8 @@ Signals meets WebSockets.
 
 This repo implements the classic TodoMVC app using Solid Socket. Most of the state and logic lives on the server, and the client communicates with it over websockets.
 
+Demo: [solid-socket-production.up.railway.app](https://solid-socket-production.up.railway.app/)
+
 ## Getting Started
 
 ``` bash
