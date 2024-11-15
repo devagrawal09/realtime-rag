@@ -34,12 +34,6 @@ export const usePresence = (
 
   createEffect(() => {
     const { docId = userId, x, y } = mousePos() || {};
-    console.log({
-      userId,
-      docId,
-      x,
-      y,
-    });
     x &&
       y &&
       setPresence((prev) => ({

@@ -3,7 +3,7 @@ import {
   useMousePosition,
   createPositionToElement,
 } from "@solid-primitives/mouse";
-import { RouteSectionProps, createAsync, useNavigate } from "@solidjs/router";
+import { RouteSectionProps } from "@solidjs/router";
 import { RiDevelopmentCursorLine } from "solid-icons/ri";
 import {
   createSignal,
@@ -15,7 +15,6 @@ import {
 } from "solid-js";
 import { createStore, reconcile } from "solid-js/store";
 import { CompleteIcon, IncompleteIcon } from "~/components/icons";
-import { useInvites } from "~/lib/todos";
 import { usePresence, PresenceUser } from "~/lib/presence";
 import { useServerTodos } from "~/lib/todos";
 import { Todo, TodosFilter } from ".";
@@ -26,7 +25,6 @@ import {
 } from "../../socket/events";
 import { createSocketMemo } from "../../socket/lib/shared";
 import { debounce } from "@solid-primitives/scheduled";
-import { getUserId } from "~/lib/auth";
 
 function TodoApp(props: { filter: TodosFilter; listId: string }) {
   const filter = () => props.filter;
@@ -129,10 +127,6 @@ function TodoApp(props: { filter: TodosFilter; listId: string }) {
         .filter((t) => t.completed)
         .map((t) => appendEvent({ type: "todo-deleted", id: t.id }))
     );
-
-  const serverInvites = useInvites();
-
-  createEffect(() => console.log(`invites`, serverInvites.inviteds));
 
   return (
     <>

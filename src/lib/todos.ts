@@ -40,10 +40,6 @@ export const useServerTodos = (_listId?: () => string | undefined) => {
       ? _listId()!
       : cookies.userId;
 
-  createEffect(() => {
-    console.log(`userId`, cookies.userId, `listId`, listId());
-  });
-
   const { serverEvents, appendEvent } = createServerEventLog(
     listId,
     todoLogs,
