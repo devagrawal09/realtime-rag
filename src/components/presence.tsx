@@ -29,6 +29,10 @@ export function PresenceHost(props: ParentProps<{ docId?: string }>) {
 
   return (
     <>
+      <p>
+        If another user has this list open and you don't see their cursor,
+        please ask them to refresh! This is a known bug that will be fixed soon.
+      </p>
       <div style={{ "text-align": "right", height: "0", padding: "5px 0" }}>
         <For each={presenceStore}>
           {(user) => {

@@ -34,7 +34,7 @@ export const usePresence = (
   onCleanup(() => {
     const { docId = userId } = mousePos() || {};
     setPresence((prev) => {
-      const { [userId]: _, ...rest } = prev[docId];
+      const { [userId]: _, ...rest } = prev[docId] || {};
       return { ...prev, [docId]: rest };
     });
   });
