@@ -1,4 +1,4 @@
-import { login } from "~/lib/auth";
+import { login, logout } from "~/lib/auth";
 
 export function Login() {
   return (
@@ -45,6 +45,38 @@ export function Login() {
         }}
       >
         Login
+      </button>
+    </form>
+  );
+}
+
+export function Logout() {
+  return (
+    <form
+      action={logout}
+      method="post"
+      style={{
+        "text-align": "center",
+        "font-size": "20px",
+        float: "right",
+      }}
+    >
+      <button
+        type="submit"
+        style={{
+          "background-color": "#f44336",
+          "border-radius": "5px",
+          color: "white",
+          padding: "5px 10px",
+          "text-align": "center",
+          "text-decoration": "none",
+          display: "inline-block",
+          "font-size": "16px",
+          margin: "4px 2px",
+          cursor: "pointer",
+        }}
+      >
+        Logout
       </button>
     </form>
   );
