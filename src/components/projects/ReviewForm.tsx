@@ -2,6 +2,7 @@ import { createSignal } from "solid-js";
 import { Button } from "~/components/ui/button";
 import { Label } from "~/components/ui/label";
 import { AiFillStar } from "solid-icons/ai";
+import { TextField, TextFieldLabel, TextFieldTextArea } from "../ui/text-field";
 
 export function ReviewForm(props: {
   onSubmit: (review: { rating: number; comment: string }) => void;
@@ -33,14 +34,13 @@ export function ReviewForm(props: {
         </div>
       </div>
       <div>
-        <Label for="comment">Comment</Label>
-        <textarea
-          id="comment"
-          value={comment()}
-          onChange={(e) => setComment(e.target.value)}
-          placeholder="Share your thoughts about this project..."
-          class="mt-1"
-        />
+        <TextField value={comment()} onChange={setComment}>
+          <TextFieldLabel for="comment">Comment</TextFieldLabel>
+          <TextFieldTextArea
+            name="comment"
+            placeholder="Share your thoughts about this project..."
+          />
+        </TextField>
       </div>
       <Button
         type="submit"

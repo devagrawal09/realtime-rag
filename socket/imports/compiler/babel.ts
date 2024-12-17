@@ -6,6 +6,7 @@ const specificRootImports = [
   "createMemo",
   "createRoot",
   "createSignal",
+  "createResource",
   "createEffect",
   "from",
   "observable",

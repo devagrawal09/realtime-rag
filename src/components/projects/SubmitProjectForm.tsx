@@ -1,3 +1,4 @@
+import { Select as KSelect } from "@kobalte/core/select";
 import { Show } from "solid-js";
 import { Button } from "~/components/ui/button";
 import { Label } from "~/components/ui/label";
@@ -23,10 +24,9 @@ export function SubmitProjectForm(props: {
     categoryId: string;
     author: string;
   }) => void;
+  categories: { categoryId: string; title: string }[];
 }) {
   const { username } = useUser();
-
-  const categories = () => [] as any[];
 
   return (
     <Show when={username()}>
@@ -39,6 +39,10 @@ export function SubmitProjectForm(props: {
           const description = formData.get("description") as string;
           const categoryId = formData.get("categoryId") as string;
 
+          if (!title || !description || !categoryId) {
+            alert("Please fill all the fields");
+            return;
+          }
           props.onSubmit({
             title,
             description,
@@ -49,26 +53,39 @@ export function SubmitProjectForm(props: {
       >
         <TextField>
           <TextFieldLabel for="title">Project Title</TextFieldLabel>
-          <TextFieldInput id="title" placeholder="Enter Title" />
+          <TextFieldInput name="title" placeholder="Enter Title" />
         </TextField>
 
         <TextField>
           <TextFieldLabel for="description">Project Description</TextFieldLabel>
-          <TextFieldTextArea id="description" placeholder="Enter Description" />
+          <TextFieldTextArea
+            name="description"
+            placeholder="Enter Description"
+          />
         </TextField>
 
         <Label for="categoryId">Category</Label>
         <Select
-          id="categoryId"
-          options={categories().map((c) => c.title)}
+          name="categoryId"
+          options={props.categories.map((c) => c.categoryId)}
           placeholder="Category"
-          itemComponent={(props) => (
-            <SelectItem item={props.item}>{props.item.rawValue}</SelectItem>
+          itemComponent={(p) => (
+            <SelectItem item={p.item}>
+              {
+                props.categories.find((c) => c.categoryId === p.item.rawValue)
+                  ?.title
+              }
+            </SelectItem>
           )}
         >
+          <KSelect.HiddenSelect />
           <SelectTrigger>
             <SelectValue<string>>
-              {(state) => state.selectedOption()}
+              {(state) =>
+                props.categories.find(
+                  (c) => c.categoryId === state.selectedOption()
+                )?.title
+              }
             </SelectValue>
           </SelectTrigger>
           <SelectContent />

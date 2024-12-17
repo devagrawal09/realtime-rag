@@ -21,7 +21,9 @@ export function ProjectCard(props: { project: Project; i: number }) {
         </CardHeader>
         <CardContent>
           <p class="mb-4 text-sm text-muted-foreground">
-            {props.project.description}
+            {props.project.description.length > 100
+              ? props.project.description.substring(0, 100) + "..."
+              : props.project.description}
           </p>
           <span class="mb-2 rounded-md bg-gray-100 px-2 py-1 text-sm font-semibold">
             {props.project.category}

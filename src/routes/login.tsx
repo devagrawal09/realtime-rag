@@ -21,6 +21,7 @@ export default function LoginPage() {
           type="text"
           placeholder="Enter your username"
           class="mb-4 w-full border p-2"
+          name="username"
         />
         <button type="submit" class="bg-blue-500 p-2 text-white">
           Sign In
