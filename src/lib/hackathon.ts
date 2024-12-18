@@ -2,14 +2,12 @@
 
 import { createOpenAI } from "@ai-sdk/openai";
 import { embed, generateText } from "ai";
-import { createEffect, createResource } from "solid-js";
+import { createResource } from "solid-js";
 import { EventLog } from "../../socket/events";
 import { createServerEventLog } from "../../socket/events/socket";
 import { createSocketMemo } from "../../socket/lib/shared";
 import { createPersistedSignal } from "../../socket/persisted";
 import { projectsCollection, storage } from "./db";
-import { set, z } from "zod";
-import { setTimeout } from "timers/promises";
 
 const openai = createOpenAI({
   compatibility: "strict",
@@ -62,14 +60,6 @@ export type HackathonEvents = CategoryEvents | ProjectEvents;
 const [hackathonLogs, setHackathonLogs] = createPersistedSignal<
   Record<string, EventLog<HackathonEvents>>
 >(storage, `hackathon-logs`, {});
-
-const [randomData, setRandomData] = createPersistedSignal<RandomData>(
-  storage,
-  `random-data`
-);
-
-let seeded = true;
-// let limit = 0;
 
 export const useGallery = () => {
   async function summarizeProject(projectId: string) {
@@ -165,8 +155,6 @@ export const useGallery = () => {
         { $set: { $vector: embedding } }
       );
     }
-
-    console.log(`Generated embedding for project ${project.title}`);
   }
 
   const { serverEvents, appendEvent } = createServerEventLog(
@@ -174,7 +162,6 @@ export const useGallery = () => {
     hackathonLogs,
     setHackathonLogs,
     (e) => {
-      console.log(`event`, e);
       if (e.type === "ProjectSubmitted") {
         summarizeProject(e.projectId);
         generateProjectEmbedding(e.projectId);
@@ -185,100 +172,13 @@ export const useGallery = () => {
     }
   );
 
-  async function generateRandomData() {
-    console.log(`generating random data`);
-    // const { partialObjectStream } = streamObject({
-    //   model: openai("gpt-4o"),
-    //   schema: z.object({
-    //     categories: z.array(
-    //       z.object({
-    //         categoryId: z.string(),
-    //         title: z.string(),
-    //         projects: z.array(
-    //           z.object({
-    //             projectId: z.string(),
-    //             title: z.string(),
-    //             description: z.string(),
-    //             author: z.string(),
-    //             reviews: z.array(
-    //               z.object({
-    //                 author: z.string(),
-    //                 rating: z.number().min(1).max(5),
-    //                 comment: z.string(),
-    //               })
-    //             ),
-    //           })
-    //         ),
-    //       })
-    //     ),
-    //   }),
-    //   prompt: `For a sample hackathon, generate 5 prize categories, 10 projects in each category, and 5 reviews for each project. The project descriptions should be very detailed, atleast 2 paragraphs, and should consist of the motivation for the project, brief overview of functionality and target users, technical and implementation details, as well as potential improvements for the future. Each review should also be detailed with 5-7 sentences, and should range from negative to positive for each project.`,
-    // });
-    // for await (const partialObject of partialObjectStream) {
-    //   console.log(`received partial object`);
-    //   setRandomData(partialObject);
-    // }
-    console.log(`done generating random data`);
-  }
-
-  createEffect(() => {
-    const data = randomData();
-    if (!data || !data.categories.length) return;
-    if (seeded) return;
-    seeded = true;
-    console.log(`seeding data`, data.categories.length);
-    data?.categories.forEach((c) => {
-      appendEvent(
-        {
-          type: `CategoryCreated`,
-          categoryId: c.categoryId,
-          title: c.title,
-          _id: crypto.randomUUID(),
-        },
-        serverEvents().length
-      );
-
-      c.projects.forEach((p) => {
-        appendEvent(
-          {
-            type: `ProjectSubmitted`,
-            projectId: p.projectId,
-            categoryId: c.categoryId,
-            title: p.title,
-            description: p.description,
-            author: p.author,
-            _id: crypto.randomUUID(),
-          },
-          serverEvents().length
-        );
-
-        p.reviews.forEach((r) => {
-          appendEvent(
-            {
-              type: `ProjectReviewed`,
-              projectId: p.projectId,
-              author: r.author,
-              rating: r.rating,
-              comment: r.comment,
-              _id: crypto.randomUUID(),
-            },
-            serverEvents().length
-          );
-        });
-      });
-    });
-  });
-
   return {
     serverEvents: createSocketMemo(serverEvents),
     appendEvent,
-    generateRandomData,
   };
 };
 
 export const useSearch = (query: () => string | undefined) => {
-  createEffect(() => console.log(`query`, query()));
-
   const [results] = createResource(query, async (q) => {
     if (!q) return [];
 
@@ -303,28 +203,3 @@ export const useSearch = (query: () => string | undefined) => {
 
   return createSocketMemo(results);
 };
-
-const randomDataSchema = z.object({
-  categories: z.array(
-    z.object({
-      categoryId: z.string(),
-      title: z.string(),
-      projects: z.array(
-        z.object({
-          projectId: z.string(),
-          title: z.string(),
-          description: z.string(),
-          author: z.string(),
-          reviews: z.array(
-            z.object({
-              author: z.string(),
-              rating: z.number().min(1).max(5),
-              comment: z.string(),
-            })
-          ),
-        })
-      ),
-    })
-  ),
-});
-type RandomData = z.infer<typeof randomDataSchema>;

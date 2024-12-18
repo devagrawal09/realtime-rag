@@ -37,8 +37,7 @@ type Review = {
 export default function ProjectGallery() {
   const { username } = useUser();
 
-  const serverLog = useGallery();
-  const { events } = createClientEventLog(serverLog);
+  const { events } = createClientEventLog(useGallery());
   createEffect(() => console.log(`ev`, events()));
 
   const gallery = createEventProjection(
@@ -121,41 +120,6 @@ export default function ProjectGallery() {
           </For>
         </Show>
       </div>
-      {/* <Button
-        variant="destructive"
-        onClick={async () => {
-          serverLog.generateRandomData();
-        }}
-      >
-        Generate Random Data
-      </Button> */}
-      {/* <div class="mt-8 grid grid-cols-2 gap-8">
-        <form
-          class="flex flex-col gap-2"
-          onSubmit={async (e) => {
-            e.preventDefault();
-            const form = e.currentTarget;
-            const formData = new FormData(form);
-            const title = formData.get("category") as string;
-
-            if (!title) return alert(`Title is required`);
-
-            await appendEvent({
-              type: `CategoryCreated`,
-              categoryId: crypto.randomUUID(),
-              title,
-            });
-
-            form.reset();
-          }}
-        >
-          <TextField>
-            <TextFieldLabel for="category">Category Title</TextFieldLabel>
-            <TextFieldInput name="category" placeholder="Enter Category" />
-          </TextField>
-          <Button type="submit">Create Category</Button>
-        </form>
-      </div> */}
     </div>
   );
 }
