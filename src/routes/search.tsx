@@ -12,18 +12,15 @@ import { createClientEventLog } from "../../socket/events";
 import {
   Card,
   CardContent,
-  CardDescription,
   CardFooter,
   CardHeader,
   CardTitle,
 } from "~/components/ui/card";
 
 export default function ProjectSearch() {
-  const [_query, setQuery] = createSignal(``);
+  const [query, setQuery] = createSignal(``);
 
-  const query = createDebouncedMemo(() => _query(), 1000);
-
-  const results = useSearch(createSocketMemo(query));
+  const results = useSearch(createSocketMemo(createDebouncedMemo(query, 1000)));
 
   const { events } = createClientEventLog(useGallery());
 
@@ -39,7 +36,7 @@ export default function ProjectSearch() {
         </A>
       </div>
 
-      <TextField onChange={setQuery} value={_query()}>
+      <TextField onChange={setQuery} value={query()}>
         <TextFieldLabel>Enter a query for semantic search</TextFieldLabel>
         <TextFieldInput placeholder="Mobile app built for banks and restaurants to join virtual queues..." />
       </TextField>
@@ -49,7 +46,7 @@ export default function ProjectSearch() {
         fallback={
           <div class="mt-8">
             <Show
-              when={_query()}
+              when={query()}
               fallback={
                 <p class="text-gray-500">
                   Enter a query to search for projects

@@ -10,7 +10,7 @@ import { DataAPIClient } from "@datastax/astra-db-ts";
 const client = new DataAPIClient(process.env.ASTRA_DB_APPLICATION_TOKEN);
 export const db = () => client.db(process.env.ASTRA_DB_API_ENDPOINT!);
 export const projectsCollection = () =>
-  db().collection<{ $vector: number[] }>("hackathon_projects");
+  db().collection<{ $vector: number[]; title: string }>("hackathon_projects");
 
 (async function () {
   const existing = (await db().listCollections()).find(
@@ -21,6 +21,9 @@ export const projectsCollection = () =>
       vector: {
         dimension: 1536,
         metric: "dot_product",
+      },
+      indexing: {
+        allow: ["*"],
       },
     });
 })();

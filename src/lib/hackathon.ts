@@ -69,7 +69,7 @@ const [randomData, setRandomData] = createPersistedSignal<RandomData>(
 );
 
 let seeded = true;
-let limit = 0;
+// let limit = 0;
 
 export const useGallery = () => {
   async function summarizeProject(projectId: string) {
@@ -88,8 +88,6 @@ export const useGallery = () => {
     const reviews = serverEvents()
       .filter((e) => e.type === "ProjectReviewed")
       .filter((r) => r.projectId === projectId);
-
-    // if (reviews.length < 5) return;
 
     const prompt = `Generate a 3 sentence summary of a project submitted to a hackathon. The project's title is "${
       project.title
@@ -148,7 +146,7 @@ export const useGallery = () => {
         : `No reviews yet`
     }`;
 
-    await setTimeout(500 * limit);
+    // await setTimeout(500 * limit);
     const { embedding } = await embed({
       model: openai.embedding("text-embedding-3-small"),
       value: prompt,
@@ -159,6 +157,7 @@ export const useGallery = () => {
       await projectsCollection().insertOne({
         _id: projectId,
         $vector: embedding,
+        title: project.title,
       });
     } else {
       await projectsCollection().updateOne(
@@ -278,6 +277,8 @@ export const useGallery = () => {
 };
 
 export const useSearch = (query: () => string | undefined) => {
+  createEffect(() => console.log(`query`, query()));
+
   const [results] = createResource(query, async (q) => {
     if (!q) return [];
 
