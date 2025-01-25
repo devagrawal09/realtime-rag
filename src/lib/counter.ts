@@ -1,10 +1,9 @@
 "use socket";
 
+import { createSignal } from "solid-js";
 import { createSocketMemo } from "../../socket/lib/shared";
-import { createPersistedSignal } from "../../socket/persisted";
-import { storage } from "./db";
 
-const [count, setCount] = createPersistedSignal<number>(storage, `count`, 0);
+const [count, setCount] = createSignal<number>(0);
 
 export const useCounter = () => {
   const increment = () => setCount(count() + 1);
