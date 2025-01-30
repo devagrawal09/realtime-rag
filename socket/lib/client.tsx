@@ -1,8 +1,7 @@
 import { createLazyMemo } from "@solid-primitives/memo";
-import { createCallback } from "@solid-primitives/rootless";
 import { createWS } from "@solid-primitives/websocket";
 import { createAsync } from "@solidjs/router";
-import { Observable, from as rxFrom } from "rxjs";
+import { applyPatches, Patch } from "immer";
 import { fromJSON, SerovalJSON, toJSON } from "seroval";
 import { createEffect, createMemo, createSignal, onCleanup } from "solid-js";
 import { createStore, produce } from "solid-js/store";
@@ -18,7 +17,6 @@ import {
   WsMessageDown,
   WsMessageUp,
 } from "./shared";
-import { applyPatches, Patch } from "immer";
 
 const protocol = window.location.protocol === "https:" ? "wss" : "ws";
 const wsUrl = `${protocol}://${window.location.hostname}:${window.location.port}/_ws`;
