@@ -1,15 +1,15 @@
 import { SerovalJSON } from "seroval";
-import { $TRACK } from "solid-js";
+import { $TRACK, $PROXY } from "solid-js";
 import { enablePatches } from "immer";
 enablePatches();
 
 export type WsMessage<T> = T & { id: string };
 
 export type WsMessageUp =
-  | {
-      type: "subscribe";
-      ref: SerializedReactiveThing;
-    }
+  // | {
+  //     type: "subscribe";
+  //     ref: SerializedReactiveThing;
+  //   }
   | {
       type: "invoke";
       ref: SerializedRef;
@@ -29,10 +29,10 @@ export type WsMessageUp =
     };
 
 export type WsMessageDown =
-  | {
-      type: "subscribe";
-      ref: SerializedReactiveThing;
-    }
+  // | {
+  //     type: "subscribe";
+  //     ref: SerializedReactiveThing;
+  //   }
   | {
       type: "invoke";
       ref: SerializedRef;
@@ -93,9 +93,25 @@ export function createSeriazliedProjection(
   return { ...opts, __type: "projection" };
 }
 
-export function createSocketMemo<T>(source: () => T): () => T | undefined {
+export function createSocketLazyMemo<T>(source: () => T): () => T | undefined {
   // @ts-expect-error
   source.type = "memo";
+  return source;
+}
+
+export function createSocketLazyProjection<T extends object>(
+  mutation: (draft: T) => void,
+  init?: T
+): T | undefined {
+  let state = init;
+  // @ts-expect-error
+  state[$TRACK] = mutation;
+  return state;
+}
+
+export function createSocketMemo<T>(source: () => T): () => T | undefined {
+  // @ts-expect-error
+  source.type = "eager-memo";
   return source;
 }
 
@@ -105,6 +121,6 @@ export function createSocketProjection<T extends object>(
 ): T | undefined {
   let state = init;
   // @ts-expect-error
-  state[$TRACK] = mutation;
+  state[$PROXY] = mutation;
   return state;
 }

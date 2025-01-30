@@ -63,31 +63,31 @@ function wsRpc(message: WsMessageUp) {
   );
 }
 
-function wsSub(message: WsMessageUp) {
-  const ws = getWs();
-  const id = crypto.randomUUID();
+// function wsSub(message: WsMessageUp) {
+//   const ws = getWs();
+//   const id = crypto.randomUUID();
 
-  return rxFrom(
-    new Observable<SerovalJSON>((obs) => {
-      // console.log(`attaching sub handler`);
-      function handler(event: { data: string }) {
-        const data = JSON.parse(event.data) as WsMessage<WsMessageDown>;
-        // console.log(`data`, data, id);
-        if (data.id === id && data.type === "value") obs.next(data.value);
-      }
+//   return rxFrom(
+//     new Observable<SerovalJSON>((obs) => {
+//       // console.log(`attaching sub handler`);
+//       function handler(event: { data: string }) {
+//         const data = JSON.parse(event.data) as WsMessage<WsMessageDown>;
+//         // console.log(`data`, data, id);
+//         if (data.id === id && data.type === "value") obs.next(data.value);
+//       }
 
-      ws.addEventListener("message", handler);
-      ws.send(
-        JSON.stringify({ ...message, id } satisfies WsMessage<WsMessageUp>)
-      );
+//       ws.addEventListener("message", handler);
+//       ws.send(
+//         JSON.stringify({ ...message, id } satisfies WsMessage<WsMessageUp>)
+//       );
 
-      return () => {
-        // console.log(`detaching sub handler`);
-        ws.removeEventListener("message", handler);
-      };
-    })
-  );
-}
+//       return () => {
+//         // console.log(`detaching sub handler`);
+//         ws.removeEventListener("message", handler);
+//       };
+//     })
+//   );
+// }
 
 function createSocketRefConsumer<I extends any[], O>(ref: SerializedRef) {
   return async (...payload: I) => {
@@ -99,58 +99,84 @@ function createSocketRefConsumer<I extends any[], O>(ref: SerializedRef) {
 
 function createSocketMemoConsumer<O>(ref: SerializedMemo<O>) {
   const [signal, setSignal] = createSignal(ref.initial);
-  const sub = wsSub({ type: "subscribe", ref }).subscribe((value) => {
-    setSignal(() => fromJSON<O>(value));
+
+  const ws = getWs();
+  function handler(event: { data: string }) {
+    const data = JSON.parse(event.data) as WsMessage<WsMessageDown>;
+    if (data.type === "value" && data.id === ref.id) {
+      setSignal(() => fromJSON<O>(data.value));
+    }
+  }
+  ws.addEventListener("message", handler);
+
+  onCleanup(() => {
+    ws.removeEventListener("message", handler);
   });
-  onCleanup(() => sub.unsubscribe());
+
   return signal;
 }
 
 function createSocketProjectionConsumer<O extends object>(
   ref: SerializedProjection<O>
 ) {
-  const [store, setStore] = createStore(ref.initial);
-  const sub = wsSub({ type: "subscribe", ref }).subscribe((patches) => {
-    setStore(
-      produce((draft) => {
-        applyPatches(draft, fromJSON<Patch[]>(patches));
-      })
-    );
-  });
-  onCleanup(() => sub.unsubscribe());
-  return store as O;
-}
-
-export function createEndpoint(name: string, rawInput?: any) {
-  const inputScope = crypto.randomUUID();
-  const { value: input, refs } = serializeReactivePayload(inputScope, rawInput);
-  // console.log({ serializedInput });
-
-  const scopePromise = wsRpc({ type: "create", name, input });
-
-  const onSubscribe = createCallback(
-    (ws: SimpleWs, id: string, source: () => any) => {
-      createEffect(() => {
-        ws.send(JSON.stringify({ type: "value", id, value: source() }));
-      });
-    }
-  );
+  const [store, setStore] = createStore(ref.initial!);
 
   const ws = getWs();
   function handler(event: { data: string }) {
     const data = JSON.parse(event.data) as WsMessage<WsMessageDown>;
-    if (data.type === "subscribe" && data.ref.scope === inputScope) {
-      const source = refs.get(data.ref.id);
-      if (source) {
-        onSubscribe(ws, data.ref.id, () => source());
-      }
+    if (data.type === "value" && data.id === ref.id) {
+      setStore(
+        produce((draft) => {
+          applyPatches(draft, fromJSON<Patch[]>(data.value));
+        })
+      );
     }
   }
   ws.addEventListener("message", handler);
 
   onCleanup(() => {
-    // console.log(`cleanup endpoint`);
     ws.removeEventListener("message", handler);
+  });
+
+  return store;
+}
+
+export function createEndpoint(name: string, rawInput?: any) {
+  const inputScope = crypto.randomUUID();
+  const {
+    value: input,
+    refs,
+    signals,
+  } = serializeReactivePayload(inputScope, rawInput);
+  // console.log({ serializedInput });
+
+  const scopePromise = wsRpc({ type: "create", name, input });
+
+  const ws = getWs();
+  signals.forEach((signal, id) => {
+    createEffect(() => {
+      ws.send(JSON.stringify({ type: "value", id, value: signal() }));
+    });
+  });
+
+  async function refHandler(event: { data: string }) {
+    const data = JSON.parse(event.data) as WsMessage<WsMessageDown>;
+    if (data.type === "invoke" && data.ref.scope === inputScope) {
+      const fn = refs.get(data.ref.id);
+      if (fn) {
+        const fnInput = fromJSON(input);
+        const arified = Array.isArray(fnInput) ? fnInput : [fnInput];
+        const res = await fn(...arified);
+        const value = toJSON(res);
+        ws.send(JSON.stringify({ type: "value", id: data.id, value }));
+      }
+    }
+  }
+  ws.addEventListener("message", refHandler);
+
+  onCleanup(() => {
+    // console.log(`cleanup endpoint`);
+    ws.removeEventListener("message", refHandler);
     scopePromise.then(({ dispose }) => dispose());
   });
 

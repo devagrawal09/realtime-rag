@@ -12,7 +12,7 @@ import {
   createEventProjection,
   createEventComputed,
 } from "../../socket/events";
-import { createSocketMemo } from "../../socket/lib/shared";
+import { createSocketLazyMemo } from "../../socket/lib/shared";
 import { CompleteIcon, IncompleteIcon } from "./icons";
 import { createLog } from "../../socket/events/v2";
 import { createEvent, createPartition, createSubjectStore } from "solid-events";
@@ -41,7 +41,7 @@ export function TodoApp(props: { filter: TodosFilter; listId?: string }) {
   };
   let inputRef!: HTMLInputElement;
 
-  const serverTodos = useServerTodos(createSocketMemo(() => props.listId));
+  const serverTodos = useServerTodos(createSocketLazyMemo(() => props.listId));
   const { events, appendEvent } = createClientEventLog(serverTodos);
   const todos = createEventProjection(
     events,

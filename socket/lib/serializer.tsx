@@ -1,3 +1,4 @@
+import { enablePatches, produce as immerProduce, Patch } from "immer";
 import { createPlugin, fromJSON, SerovalJSON, toJSON } from "seroval";
 import { $TRACK, Accessor, createMemo } from "solid-js";
 import {
@@ -8,16 +9,11 @@ import {
   SerializedProjection,
   SerializedRef,
 } from "./shared";
-import {
-  produce as immerProduce,
-  applyPatches,
-  enablePatches,
-  Patch,
-} from "immer";
 enablePatches();
 
 export function serializeReactivePayload(scope: string, input: any) {
   const refs = new Map<string, Function>();
+  const signals = new Map<string, Function>();
 
   const value = toJSON(input, {
     plugins: [
@@ -35,13 +31,13 @@ export function serializeReactivePayload(scope: string, input: any) {
         deserialize: () => ({} as any),
       }),
       createPlugin<Function, SerializedMemo>({
-        tag: "seroval-plugins/socket/memo",
+        tag: "seroval-plugins/socket/lazy-memo",
         test: (value: any) =>
           typeof value === "function" && value.type === "memo",
         parse: {
           sync(value) {
             const id = crypto.randomUUID();
-            refs.set(id, value);
+            signals.set(id, value);
             return createSeriazliedMemo({ scope, id });
           },
         },
@@ -49,7 +45,7 @@ export function serializeReactivePayload(scope: string, input: any) {
         deserialize: () => ({} as any),
       }),
       createPlugin<any, SerializedProjection>({
-        tag: "seroval-plugins/socket/projection",
+        tag: "seroval-plugins/socket/lazy-projection",
         test: (value: any) => $TRACK in value,
         parse: {
           sync(state) {
@@ -68,7 +64,7 @@ export function serializeReactivePayload(scope: string, input: any) {
               { state, changes: [] as Patch[] }
             );
 
-            refs.set(id, () => projection().changes);
+            signals.set(id, () => projection().changes);
             return createSeriazliedProjection({ scope, id, initial: state });
           },
         },
@@ -78,7 +74,7 @@ export function serializeReactivePayload(scope: string, input: any) {
     ],
   });
 
-  return { value, refs };
+  return { value, refs, signals };
 }
 
 export function deserializeReactivePayload(

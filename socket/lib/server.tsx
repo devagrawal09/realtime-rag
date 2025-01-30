@@ -1,12 +1,12 @@
 import { parse as parseCookie } from "cookie-es";
 import type { Peer } from "crossws";
+import { applyPatches, Patch } from "immer";
 import { fromJSON, SerovalJSON, toJSON } from "seroval";
 import {
-  batch,
   createContext,
+  createEffect,
   createRoot,
   createSignal,
-  observable,
   onCleanup,
   useContext,
 } from "solid-js";
@@ -19,14 +19,12 @@ import {
 import {
   SerializedMemo,
   SerializedProjection,
-  SerializedReactiveThing,
   SerializedRef,
   SerializedStream,
   WsMessage,
   WsMessageDown,
   WsMessageUp,
 } from "./shared";
-import { applyPatches, Patch } from "immer";
 
 const peerCtx = createContext<Peer>();
 export const usePeer = () => {
@@ -70,7 +68,7 @@ export class LiveSolidServer {
 
   constructor(public peer: Peer) {}
 
-  send<T>(message: WsMessage<WsMessageDown>) {
+  send(message: WsMessage<WsMessageDown>) {
     // console.log(`send`, message);
     this.peer.send(JSON.stringify(message));
   }
@@ -80,9 +78,9 @@ export class LiveSolidServer {
       this.create(message.id, message.name, message.input);
     }
 
-    if (message.type === "subscribe") {
-      this.subscribe(message.id, message.ref);
-    }
+    // if (message.type === "subscribe") {
+    //   this.subscribe(message.id, message.ref);
+    // }
 
     if (message.type === "dispose") {
       this.dispose(message.id);
@@ -106,7 +104,7 @@ export class LiveSolidServer {
 
     if (!endpoint) throw new Error(`Endpoint ${name} not found`);
 
-    const { payload, disposal } = createRoot((disposal) => {
+    const { refs, disposal } = createRoot((disposal) => {
       const deserializedInput =
         input &&
         deserializeReactivePayload(input, {
@@ -124,12 +122,17 @@ export class LiveSolidServer {
         children: () => (payload = endpoint(deserializedInput)),
       });
 
-      return { payload, disposal };
-    });
+      const { refs, signals, value } = serializeReactivePayload(id, payload);
+      this.send({ value, id, type: "value" });
+      signals.forEach((signal, id) => {
+        createEffect(() => {
+          this.send({ value: signal(), id, type: "value" });
+        });
+      });
 
-    const { refs, value } = serializeReactivePayload(id, payload);
+      return { refs, disposal };
+    });
     this.closures.set(id, { refs, disposal });
-    this.send({ value, id, type: "value" });
   }
 
   async invoke<I, O>(id: string, ref: SerializedRef<I, O>, input: SerovalJSON) {
@@ -138,7 +141,7 @@ export class LiveSolidServer {
     const arified = Array.isArray(fnInput) ? fnInput : [fnInput];
     const response = await refFn(...arified);
     const value = toJSON(response);
-    this.send({ id: id, value, type: "value" });
+    this.send({ id, value, type: "value" });
   }
 
   dispose(id: string) {
@@ -149,18 +152,18 @@ export class LiveSolidServer {
     }
   }
 
-  subscribe<O>(id: string, ref: SerializedReactiveThing<O>) {
-    const source = this.closures.get(ref.scope)!.refs!.get(ref.id)!;
+  // subscribe<O>(id: string, ref: SerializedReactiveThing<O>) {
+  //   const source = this.closures.get(ref.scope)!.refs!.get(ref.id)!;
 
-    const response$ = observable(() => source());
+  //   const response$ = observable(() => source());
 
-    const sub = response$.subscribe((payload) => {
-      const value = toJSON(payload);
-      this.send({ id, value, type: "value" });
-    });
+  //   const sub = response$.subscribe((payload) => {
+  //     const value = toJSON(payload);
+  //     this.send({ id, value, type: "value" });
+  //   });
 
-    this.closures.set(id, { disposal: () => sub.unsubscribe() });
-  }
+  //   this.closures.set(id, { disposal: () => sub.unsubscribe() });
+  // }
 
   stream<O>(stream: SerializedStream) {}
 
@@ -197,12 +200,9 @@ function createSocketMemoConsumer<O>(
   ref: SerializedMemo<O>,
   server: LiveSolidServer
 ) {
-  const inputSubId = crypto.randomUUID();
-
-  const [signal, setSignal] = createSignal<O>(ref.initial!);
-  server.observers.set(inputSubId, (value) => setSignal(() => fromJSON(value)));
-  server.send({ type: "subscribe", id: inputSubId, ref });
-  onCleanup(() => server.observers.delete(inputSubId));
+  const [signal, setSignal] = createSignal(ref.initial);
+  server.observers.set(ref.id, (value) => setSignal(() => fromJSON(value)));
+  onCleanup(() => server.observers.delete(ref.id));
   return signal;
 }
 
@@ -210,17 +210,14 @@ function createSocketProjectionConsumer<O>(
   ref: SerializedProjection<O>,
   server: LiveSolidServer
 ) {
-  const inputSubId = crypto.randomUUID();
-
   const [store, setStore] = createStore(ref.initial!);
-  server.observers.set(inputSubId, (patches) => {
+  server.observers.set(ref.id, (patches) => {
     setStore(
       produce((draft) => {
         applyPatches(draft, fromJSON<Patch[]>(patches));
       })
     );
   });
-  server.send({ type: "subscribe", id: inputSubId, ref });
-  onCleanup(() => server.observers.delete(inputSubId));
+  onCleanup(() => server.observers.delete(ref.id));
   return store;
 }
