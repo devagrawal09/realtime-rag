@@ -126,7 +126,7 @@ export class LiveSolidServer {
       this.send({ value, id, type: "value" });
       signals.forEach((signal, id) => {
         createEffect(() => {
-          this.send({ value: signal(), id, type: "value" });
+          this.send({ value: toJSON(signal()), id, type: "value" });
         });
       });
 

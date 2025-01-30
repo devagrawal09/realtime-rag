@@ -1,7 +1,7 @@
 "use socket";
 
 import { createEffect, createMemo, createSignal, onCleanup } from "solid-js";
-import { createSocketLazyMemo } from "../../socket/lib/shared";
+import { createSocketMemo } from "../../socket/lib/shared";
 import { useCookies } from "../../socket/lib/server";
 
 export type PresenceUser = {
@@ -45,5 +45,5 @@ export const usePresence = (
     return rest;
   });
 
-  return createSocketLazyMemo(otherUsers);
+  return createSocketMemo(otherUsers);
 };

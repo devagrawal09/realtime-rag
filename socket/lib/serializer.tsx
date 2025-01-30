@@ -1,13 +1,16 @@
 import { enablePatches, produce as immerProduce, Patch } from "immer";
 import { createPlugin, fromJSON, SerovalJSON, toJSON } from "seroval";
-import { $TRACK, Accessor, createMemo } from "solid-js";
+import { Accessor, createMemo } from "solid-js";
 import {
   createSeriazliedMemo,
   createSeriazliedProjection,
   createSeriazliedRef,
   SerializedMemo,
+  SerializedMemoClass,
   SerializedProjection,
+  SerializedProjectionClass,
   SerializedRef,
+  SerializedRefClass,
 } from "./shared";
 enablePatches();
 
@@ -17,55 +20,60 @@ export function serializeReactivePayload(scope: string, input: any) {
 
   const value = toJSON(input, {
     plugins: [
-      createPlugin<Function, SerializedRef>({
+      createPlugin<SerializedRefClass, SerializedRef>({
         tag: "seroval-plugins/socket/ref",
-        test: (value) => typeof value === "function",
+        test: (value) => value instanceof SerializedRefClass,
         parse: {
           sync(value) {
             const id = crypto.randomUUID();
-            refs.set(id, value);
+            refs.set(id, value.handler);
             return createSeriazliedRef({ scope, id });
           },
         },
         serialize: () => ``,
         deserialize: () => ({} as any),
       }),
-      createPlugin<Function, SerializedMemo>({
-        tag: "seroval-plugins/socket/lazy-memo",
-        test: (value: any) =>
-          typeof value === "function" && value.type === "memo",
+      createPlugin<SerializedMemoClass, SerializedMemo>({
+        tag: "seroval-plugins/socket/memo",
+        test: (value: any) => value instanceof SerializedMemoClass,
         parse: {
           sync(value) {
             const id = crypto.randomUUID();
-            signals.set(id, value);
+            signals.set(id, value.signal);
             return createSeriazliedMemo({ scope, id });
           },
         },
         serialize: () => ``,
         deserialize: () => ({} as any),
       }),
-      createPlugin<any, SerializedProjection>({
-        tag: "seroval-plugins/socket/lazy-projection",
-        test: (value: any) => $TRACK in value,
+      createPlugin<SerializedProjectionClass, SerializedProjection>({
+        tag: "seroval-plugins/socket/projection",
+        test: (value: any) => value instanceof SerializedProjectionClass,
         parse: {
-          sync(state) {
+          sync(store) {
             const id = crypto.randomUUID();
-
-            const mutation = state[$TRACK];
 
             const projection = createMemo(
               ({ state, changes: _c }) => {
                 let changes = [] as Patch[];
-                const s = immerProduce(state, mutation, (patches) => {
-                  changes.push(...patches);
-                });
+                const s = immerProduce(
+                  state,
+                  store.mutation as any,
+                  (patches) => {
+                    changes.push(...patches);
+                  }
+                );
                 return { state: s, changes };
               },
-              { state, changes: [] as Patch[] }
+              { state: store.init, changes: [] as Patch[] }
             );
 
             signals.set(id, () => projection().changes);
-            return createSeriazliedProjection({ scope, id, initial: state });
+            return createSeriazliedProjection({
+              scope,
+              id,
+              initial: store.init,
+            });
           },
         },
         serialize: () => ``,
@@ -91,6 +99,7 @@ export function deserializeReactivePayload(
     ): O;
   }
 ) {
+  console.log({ value });
   return fromJSON<any>(value, {
     plugins: [
       createPlugin<Function, SerializedRef>({

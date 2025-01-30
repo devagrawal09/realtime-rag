@@ -1,21 +1,12 @@
-import { createSignal, createMemo, Show, For } from "solid-js";
-import {
-  TodoCreated,
-  TodoDeleted,
-  TodoEdited,
-  TodoEvent,
-  TodoToggled,
-  useServerTodos,
-} from "~/lib/todos";
+import { createMemo, createSignal, For, Show } from "solid-js";
+import { useServerTodos } from "~/lib/todos";
 import {
   createClientEventLog,
-  createEventProjection,
   createEventComputed,
+  createEventProjection,
 } from "../../socket/events";
-import { createSocketLazyMemo } from "../../socket/lib/shared";
+import { createSocketMemo } from "../../socket/lib/shared";
 import { CompleteIcon, IncompleteIcon } from "./icons";
-import { createLog } from "../../socket/events/v2";
-import { createEvent, createPartition, createSubjectStore } from "solid-events";
 
 export type TodosFilter = "all" | "active" | "completed" | undefined;
 
@@ -41,7 +32,7 @@ export function TodoApp(props: { filter: TodosFilter; listId?: string }) {
   };
   let inputRef!: HTMLInputElement;
 
-  const serverTodos = useServerTodos(createSocketLazyMemo(() => props.listId));
+  const serverTodos = useServerTodos(createSocketMemo(() => props.listId));
   const { events, appendEvent } = createClientEventLog(serverTodos);
   const todos = createEventProjection(
     events,

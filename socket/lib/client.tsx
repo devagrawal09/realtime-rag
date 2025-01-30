@@ -164,7 +164,7 @@ export function createEndpoint(name: string, rawInput?: any) {
     if (data.type === "invoke" && data.ref.scope === inputScope) {
       const fn = refs.get(data.ref.id);
       if (fn) {
-        const fnInput = fromJSON(input);
+        const fnInput = fromJSON(data.input);
         const arified = Array.isArray(fnInput) ? fnInput : [fnInput];
         const res = await fn(...arified);
         const value = toJSON(res);

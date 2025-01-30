@@ -12,7 +12,7 @@ import {
 } from "solid-js";
 import { createStore, reconcile } from "solid-js/store";
 import { usePresence, PresenceUser } from "~/lib/presence";
-import { createSocketLazyMemo } from "../../socket/lib/shared";
+import { createSocketMemo } from "../../socket/lib/shared";
 import { throttle } from "@solid-primitives/scheduled";
 import { RiDevelopmentCursorLine } from "solid-icons/ri";
 
@@ -20,7 +20,7 @@ export function PresenceHost(props: ParentProps<{ docId?: string }>) {
   let ref: HTMLElement | undefined;
   const mousePos = createDebouncedMousePos(() => ref);
   const userPos = () => ({ docId: props.docId, ...mousePos() });
-  const users = usePresence(createSocketLazyMemo(userPos));
+  const users = usePresence(createSocketMemo(userPos));
   const [presenceStore, setPresenceStore] = createStore<PresenceUser[]>([]);
 
   createComputed(() =>

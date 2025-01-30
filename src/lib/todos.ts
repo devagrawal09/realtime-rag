@@ -2,7 +2,7 @@
 
 import { createServerEventLog } from "../../socket/events/socket";
 import { useCookies } from "../../socket/lib/server";
-import { createSocketLazyMemo } from "../../socket/lib/shared";
+import { createSocketMemo } from "../../socket/lib/shared";
 import { EventLog } from "../../socket/events";
 import { createPersistedSignal } from "../../socket/persisted";
 import { storage } from "./db";
@@ -46,7 +46,7 @@ export const useServerTodos = (_listId?: () => string | undefined) => {
   );
 
   return {
-    serverEvents: createSocketLazyMemo(serverEvents),
+    serverEvents: createSocketMemo(serverEvents),
     appendEvent,
   };
 };
@@ -74,12 +74,12 @@ export const useInvites = () => {
   };
 
   return {
-    inviteds: createSocketLazyMemo(() =>
+    inviteds: createSocketMemo(() =>
       Object.entries(invites())
         .filter(([, invites]) => invites.includes(cookies.userId))
         .map(([invitee]) => invitee)
     ),
-    invites: createSocketLazyMemo(() => invites()[cookies.userId] || []),
+    invites: createSocketMemo(() => invites()[cookies.userId] || []),
     addInvite,
     removeInvite,
   };
