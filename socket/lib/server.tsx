@@ -1,28 +1,32 @@
+import { parse as parseCookie } from "cookie-es";
+import type { Peer } from "crossws";
+import { fromJSON, SerovalJSON, toJSON } from "seroval";
 import {
-  createSeriazliedMemo,
-  createSeriazliedStore,
-  SerializedMemo,
-  SerializedReactiveThing,
-  SerializedRef,
-  SerializedStream,
-  SerializedThing,
-  WsMessage,
-  WsMessageDown,
-  WsMessageUp,
-} from "./shared";
-import {
+  batch,
   createContext,
-  createMemo,
   createRoot,
   createSignal,
   observable,
   onCleanup,
-  untrack,
   useContext,
 } from "solid-js";
+import { createStore, produce } from "solid-js/store";
 import { getManifest } from "vinxi/manifest";
-import type { Peer } from "crossws";
-import { parse as parseCookie } from "cookie-es";
+import {
+  deserializeReactivePayload,
+  serializeReactivePayload,
+} from "./serializer";
+import {
+  SerializedMemo,
+  SerializedProjection,
+  SerializedReactiveThing,
+  SerializedRef,
+  SerializedStream,
+  WsMessage,
+  WsMessageDown,
+  WsMessageUp,
+} from "./shared";
+import { applyPatches, Patch } from "immer";
 
 const peerCtx = createContext<Peer>();
 export const usePeer = () => {
@@ -58,12 +62,15 @@ export type Endpoint<I> = (
 export type Endpoints = Record<string, Endpoint<any>>;
 
 export class LiveSolidServer {
-  private closures = new Map<string, { payload: any; disposal: () => void }>();
-  observers = new Map<string, Function>();
+  private closures = new Map<
+    string,
+    { refs?: Map<string, Function>; disposal: () => void }
+  >();
+  observers = new Map<string, (value: any) => void>();
 
   constructor(public peer: Peer) {}
 
-  send<T>(message: WsMessage<WsMessageDown<T>>) {
+  send<T>(message: WsMessage<WsMessageDown>) {
     // console.log(`send`, message);
     this.peer.send(JSON.stringify(message));
   }
@@ -74,7 +81,7 @@ export class LiveSolidServer {
     }
 
     if (message.type === "subscribe") {
-      this.subscribe(message.id, message.ref, message.path || ``);
+      this.subscribe(message.id, message.ref);
     }
 
     if (message.type === "dispose") {
@@ -90,7 +97,7 @@ export class LiveSolidServer {
     }
   }
 
-  async create(id: string, name: string, input?: SerializedThing) {
+  async create(id: string, name: string, input?: SerovalJSON) {
     const [filepath, functionName] = name.split("#");
     const module = await getManifest(import.meta.env.ROUTER_NAME).chunks[
       filepath
@@ -101,9 +108,14 @@ export class LiveSolidServer {
 
     const { payload, disposal } = createRoot((disposal) => {
       const deserializedInput =
-        input?.__type === "memo"
-          ? createSocketMemoConsumer(input, this)
-          : input;
+        input &&
+        deserializeReactivePayload(input, {
+          createSocketRefConsumer: (ref) => createSocketRefConsumer(ref, this),
+          createSocketMemoConsumer: (ref) =>
+            createSocketMemoConsumer(ref, this),
+          createSocketProjectionConsumer: (ref) =>
+            createSocketProjectionConsumer(ref, this),
+        });
 
       let payload: any;
       peerCtx.Provider({
@@ -115,67 +127,21 @@ export class LiveSolidServer {
       return { payload, disposal };
     });
 
-    this.closures.set(id, { payload, disposal });
-
-    if (typeof payload === "function") {
-      if (payload.type === "memo") {
-        const value = createSeriazliedMemo({
-          name,
-          scope: id,
-          initial: untrack(payload),
-        });
-        this.send({ value, id, type: "value" });
-      } else {
-        const value = createSeriazliedRef({
-          name,
-          scope: id,
-        });
-        this.send({ value, id, type: "value" });
-      }
-    } else {
-      const value = Object.entries(payload).reduce((res, [name, value]) => {
-        return {
-          ...res,
-          [name]:
-            typeof value === "function"
-              ? // @ts-expect-error
-                value.type === "memo"
-                ? createSeriazliedMemo({
-                    name,
-                    scope: id,
-                    initial: untrack(() => value()),
-                  })
-                : // @ts-expect-error
-                value.type === "store-accessor"
-                ? createSeriazliedStore({
-                    name,
-                    scope: id,
-                    initial: untrack(() => value()),
-                  })
-                : createSeriazliedRef({ name, scope: id })
-              : value,
-        };
-      }, {} as Record<string, any>);
-      this.send({ value, id, type: "value" });
-    }
+    const { refs, value } = serializeReactivePayload(id, payload);
+    this.closures.set(id, { refs, disposal });
+    this.send({ value, id, type: "value" });
   }
 
-  async invoke<I, O>(id: string, ref: SerializedRef<I, O>, input: any[]) {
-    const closure = this.closures.get(ref.scope);
-    if (!closure) throw new Error(`Callable ${ref.scope} not found`);
-    const { payload } = closure;
-
-    if (typeof payload === "function") {
-      const response = await payload(...input);
-      this.send({ id, value: response, type: "value" });
-    } else {
-      const response = await payload[ref.name](...input);
-      this.send({ id, value: response, type: "value" });
-    }
+  async invoke<I, O>(id: string, ref: SerializedRef<I, O>, input: SerovalJSON) {
+    const refFn = this.closures.get(ref.scope)!.refs!.get(ref.id)!;
+    const fnInput = fromJSON(input);
+    const arified = Array.isArray(fnInput) ? fnInput : [fnInput];
+    const response = await refFn(...arified);
+    const value = toJSON(response);
+    this.send({ id: id, value, type: "value" });
   }
 
   dispose(id: string) {
-    // console.log(`Disposing ${id}`);
     const closure = this.closures.get(id);
     if (closure) {
       closure.disposal();
@@ -183,29 +149,20 @@ export class LiveSolidServer {
     }
   }
 
-  subscribe<O>(id: string, ref: SerializedReactiveThing<O>, path: string) {
-    // console.log(`subscribe`, ref);
+  subscribe<O>(id: string, ref: SerializedReactiveThing<O>) {
+    const source = this.closures.get(ref.scope)!.refs!.get(ref.id)!;
 
-    const closure = this.closures.get(ref.scope);
-    if (!closure) throw new Error(`Callable ${ref.scope} not found`);
-    const { payload } = closure;
+    const response$ = observable(() => source());
 
-    const source = typeof payload === "function" ? payload : payload[ref.name];
-
-    const response$ = observable(() =>
-      ref.__type === "projection"
-        ? source[path]
-        : ref.__type === "store-accessor"
-        ? source()[path]
-        : source()
-    );
-    const sub = response$.subscribe((value) => {
+    const sub = response$.subscribe((payload) => {
+      const value = toJSON(payload);
       this.send({ id, value, type: "value" });
     });
-    this.closures.set(id, { payload: sub, disposal: () => sub.unsubscribe() });
+
+    this.closures.set(id, { disposal: () => sub.unsubscribe() });
   }
 
-  stream<O>(stream: SerializedStream<O>) {}
+  stream<O>(stream: SerializedStream) {}
 
   cleanup() {
     for (const [key, closure] of this.closures.entries()) {
@@ -216,62 +173,54 @@ export class LiveSolidServer {
   }
 }
 
-function createSeriazliedRef(
-  opts: Omit<SerializedRef, "__type">
-): SerializedRef {
-  return { ...opts, __type: "ref" };
-}
+function createSocketRefConsumer<I extends any[], O>(
+  ref: SerializedRef,
+  server: LiveSolidServer
+) {
+  const inputSubId = crypto.randomUUID();
 
-export function createSocketFn<I, O>(
-  fn: () => (i?: I) => O
-): () => (i?: I) => Promise<O>;
+  return (...payload: I) => {
+    const input = toJSON(payload);
 
-export function createSocketFn<I, O>(
-  fn: () => Record<string, (i?: I) => O>
-): () => Record<string, (i?: I) => Promise<O>>;
+    server.send({ type: "invoke", id: inputSubId, ref, input });
 
-export function createSocketFn<I, O>(
-  fn: () => ((i: I) => O) | Record<string, (i: I) => O>
-): () => ((i: I) => Promise<O>) | Record<string, (i: I) => Promise<O>> {
-  return fn as any;
-}
-
-function createLazyMemo<T>(
-  calc: (prev: T | undefined) => T,
-  value?: T
-): () => T {
-  let isReading = false,
-    isStale: boolean | undefined = true;
-
-  const [track, trigger] = createSignal(void 0, { equals: false }),
-    memo = createMemo<T>(
-      (p) => (isReading ? calc(p) : ((isStale = !track()), p)),
-      value as T,
-      { equals: false }
-    );
-
-  return (): T => {
-    isReading = true;
-    if (isStale) isStale = trigger();
-    const v = memo();
-    isReading = false;
-    return v;
+    return new Promise<O>((res) => {
+      server.observers.set(inputSubId, (value) => {
+        res(fromJSON(value));
+        server.observers.delete(inputSubId);
+      });
+    });
   };
 }
 
-export function createSocketMemoConsumer<O>(
+function createSocketMemoConsumer<O>(
   ref: SerializedMemo<O>,
   server: LiveSolidServer
 ) {
   const inputSubId = crypto.randomUUID();
 
-  const memo = createLazyMemo(() => {
-    const [get, set] = createSignal<O>(ref.initial!);
-    server.observers.set(inputSubId, set);
-    server.send({ type: "subscribe", id: inputSubId, ref });
-    onCleanup(() => server.observers.delete(inputSubId));
-    return get;
-  });
+  const [signal, setSignal] = createSignal<O>(ref.initial!);
+  server.observers.set(inputSubId, (value) => setSignal(() => fromJSON(value)));
+  server.send({ type: "subscribe", id: inputSubId, ref });
+  onCleanup(() => server.observers.delete(inputSubId));
+  return signal;
+}
 
-  return () => memo()();
+function createSocketProjectionConsumer<O>(
+  ref: SerializedProjection<O>,
+  server: LiveSolidServer
+) {
+  const inputSubId = crypto.randomUUID();
+
+  const [store, setStore] = createStore(ref.initial!);
+  server.observers.set(inputSubId, (patches) => {
+    setStore(
+      produce((draft) => {
+        applyPatches(draft, fromJSON<Patch[]>(patches));
+      })
+    );
+  });
+  server.send({ type: "subscribe", id: inputSubId, ref });
+  onCleanup(() => server.observers.delete(inputSubId));
+  return store;
 }

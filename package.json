@@ -5,7 +5,8 @@
   "scripts": {
     "dev": "vinxi dev",
     "build": "vinxi build",
-    "start": "vinxi start"
+    "start": "vinxi start",
+    "test": "vitest"
   },
   "author": "Dev Agrawal <devagrawal09@gmail.com> (http://devagr.me/)",
   "dependencies": {
@@ -16,7 +17,9 @@
     "@solid-primitives/websocket": "^1.2.2",
     "@solidjs/router": "^0.14.10",
     "@solidjs/start": "^1.0.9",
+    "immer": "^10.1.1",
     "rxjs": "^7.8.1",
+    "seroval": "^1.2.0",
     "solid-events": "^0.0.5",
     "solid-icons": "^1.1.0",
     "solid-js": "^1.9.2",
@@ -31,6 +34,7 @@
     "@babel/preset-typescript": "^7.26.0",
     "@vinxi/plugin-directives": "^0.4.3",
     "babel-plugin-transform-import-paths": "^1.0.3",
-    "vite-plugin-babel": "^1.2.0"
+    "vite-plugin-babel": "^1.2.0",
+    "vitest": "^3.0.4"
   }
 }

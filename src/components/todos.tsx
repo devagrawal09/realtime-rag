@@ -28,70 +28,6 @@ export type Todo = {
 export function TodoApp(props: { filter: TodosFilter; listId?: string }) {
   const filter = () => props.filter;
 
-  const [onServerTodoEvent, emitServerTodoEvent] = createEvent<TodoEvent>();
-
-  const { log: todoEventLog, onEvent: onTodoEvent } = createLog<TodoEvent>({
-    onEvent: onServerTodoEvent,
-  });
-
-  const [onTodoAdded] = createPartition<TodoCreated, TodoEvent>(
-    onTodoEvent,
-    (e) => e.type === "todo-added"
-  );
-  const [onTodoToggled] = createPartition<TodoToggled, TodoEvent>(
-    onTodoEvent,
-    (e) => e.type === "todo-toggled"
-  );
-  const [onTodoDeleted] = createPartition<TodoDeleted, TodoEvent>(
-    onTodoEvent,
-    (e) => e.type === "todo-deleted"
-  );
-  const [onTodoEdited] = createPartition<TodoEdited, TodoEvent>(
-    onTodoEvent,
-    (e) => e.type === "todo-edited"
-  );
-
-  const todos = createSubjectStore(
-    () => [] as Todo[],
-    onTodoAdded((e) => (todos) => {
-      const todo = todos.find((t) => t.id === e.id);
-      if (!todo) todos.push({ id: e.id, title: e.title, completed: false });
-    }),
-    onTodoToggled((e) => (todos) => {
-      const todo = todos.find((t) => t.id === e.id);
-      if (todo) todo.completed = !todo.completed;
-    }),
-    onTodoDeleted((e) => (todos) => {
-      const index = todos.findIndex((note) => note.id === e.id);
-      if (index !== -1) todos.splice(index, 1);
-    }),
-    onTodoEdited((e) => (todos) => {
-      const todo = todos.find((t) => t.id === e.id);
-      if (todo) todo.title = e.title;
-    })
-  );
-
-  // const _todos = createSubjectStore(
-  //   () => [] as Todo[],
-  //   onTodoEvent((e) => (todos) => {
-  //     if (e.type === "todo-added") {
-  //       todos.push({ id: e.id, title: e.title, completed: false });
-  //     }
-  //     if (e.type === "todo-toggled") {
-  //       const todo = todos.find((t) => t.id === e.id);
-  //       if (todo) todo.completed = !todo.completed;
-  //     }
-  //     if (e.type === "todo-deleted") {
-  //       const index = todos.findIndex((note) => note.id === e.id);
-  //       if (index !== -1) todos.splice(index, 1);
-  //     }
-  //     if (e.type === "todo-edited") {
-  //       const todo = todos.find((t) => t.id === e.id);
-  //       if (todo) todo.title = e.title;
-  //     }
-  //   })
-  // );
-
   const [editingTodoId, setEditingId] = createSignal();
 
   const setEditing = ({
@@ -107,28 +43,28 @@ export function TodoApp(props: { filter: TodosFilter; listId?: string }) {
 
   const serverTodos = useServerTodos(createSocketMemo(() => props.listId));
   const { events, appendEvent } = createClientEventLog(serverTodos);
-  // const todos = createEventProjection(
-  //   events,
-  //   (acc, e) => {
-  //     if (e.type === "todo-added") {
-  //       acc.push({ id: e.id, title: e.title, completed: false });
-  //     }
-  //     if (e.type === "todo-toggled") {
-  //       const todo = acc.find((t) => t.id === e.id);
-  //       if (todo) todo.completed = !todo.completed;
-  //     }
-  //     if (e.type === "todo-deleted") {
-  //       const index = acc.findIndex((note) => note.id === e.id);
-  //       if (index !== -1) acc.splice(index, 1);
-  //     }
-  //     if (e.type === "todo-edited") {
-  //       const todo = acc.find((t) => t.id === e.id);
-  //       if (todo) todo.title = e.title;
-  //     }
-  //     return acc;
-  //   },
-  //   [] as Todo[]
-  // );
+  const todos = createEventProjection(
+    events,
+    (acc, e) => {
+      if (e.type === "todo-added") {
+        acc.push({ id: e.id, title: e.title, completed: false });
+      }
+      if (e.type === "todo-toggled") {
+        const todo = acc.find((t) => t.id === e.id);
+        if (todo) todo.completed = !todo.completed;
+      }
+      if (e.type === "todo-deleted") {
+        const index = acc.findIndex((note) => note.id === e.id);
+        if (index !== -1) acc.splice(index, 1);
+      }
+      if (e.type === "todo-edited") {
+        const todo = acc.find((t) => t.id === e.id);
+        if (todo) todo.title = e.title;
+      }
+      return acc;
+    },
+    [] as Todo[]
+  );
 
   const filteredTodos = createMemo(() => {
     if (filter() === "active") return todos.filter((t) => !t.completed);

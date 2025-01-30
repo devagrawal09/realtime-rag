@@ -5,12 +5,17 @@ import { Invites } from "~/components/invites";
 import { PresenceHost } from "~/components/presence";
 import { TodoApp, TodosFilter } from "~/components/todos";
 import { getUserId } from "~/lib/auth";
+import { useCounter } from "~/lib/counter";
 
 export default function TodoAppPage(props: RouteSectionProps) {
   const userId = createAsync(() => getUserId());
+  const counter = useCounter();
 
   return (
     <>
+      <button onClick={() => counter.increment()}>
+        Count {counter.count()}
+      </button>
       <Show
         when={userId()}
         fallback={

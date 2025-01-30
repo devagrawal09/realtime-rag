@@ -1,94 +1,85 @@
-import { createComputed, $PROXY } from "solid-js";
-import { createStore, produce } from "solid-js/store";
+import { SerovalJSON } from "seroval";
+import { $TRACK } from "solid-js";
+import { enablePatches } from "immer";
+enablePatches();
 
 export type WsMessage<T> = T & { id: string };
 
-export type WsMessageUp<I = any> =
-  | {
-      type: "create";
-      name: string;
-      input?: I;
-    }
+export type WsMessageUp =
   | {
       type: "subscribe";
-      ref: SerializedMemo;
-      path?: undefined;
-    }
-  | {
-      type: "subscribe";
-      ref: SerializedProjection | SerializedStoreAccessor;
-      path: string;
-    }
-  | {
-      type: "dispose";
+      ref: SerializedReactiveThing;
     }
   | {
       type: "invoke";
       ref: SerializedRef;
-      input?: I;
+      input: SerovalJSON;
     }
   | {
       type: "value";
-      value: I;
+      value: SerovalJSON;
+    }
+  | {
+      type: "create";
+      name: string;
+      input: SerovalJSON;
+    }
+  | {
+      type: "dispose";
     };
 
-export type WsMessageDown<T> =
+export type WsMessageDown =
+  | {
+      type: "subscribe";
+      ref: SerializedReactiveThing;
+    }
+  | {
+      type: "invoke";
+      ref: SerializedRef;
+      input: SerovalJSON;
+    }
   | {
       type: "value";
-      value: T;
-    }
-  | {
-      type: "subscribe";
-      ref: SerializedMemo;
-    }
-  | {
-      type: "subscribe";
-      ref: SerializedProjection;
-      path: string;
+      value: SerovalJSON;
     };
 
 export type SerializedRef<I = any, O = any> = {
   __type: "ref";
-  name: string;
+  id: string;
   scope: string;
 };
 
 export type SerializedMemo<O = any> = {
   __type: "memo";
-  name: string;
+  id: string;
   scope: string;
   initial?: O;
 };
 
 export type SerializedProjection<O = any> = {
   __type: "projection";
-  name: string;
-  scope: string;
-  initial?: O;
-};
-
-export type SerializedStoreAccessor<O = any> = {
-  __type: "store-accessor";
-  name: string;
+  id: string;
   scope: string;
   initial?: O;
 };
 
 export type SerializedReactiveThing<T = any> =
   | SerializedMemo<T>
-  | SerializedProjection<T>
-  | SerializedStoreAccessor<T>;
+  | SerializedProjection<T>;
 
-export type SerializedThing<T = any> =
-  | SerializedRef<T>
-  | SerializedReactiveThing<T>;
+export type SerializedThing = SerializedRef | SerializedReactiveThing;
 
-export type SerializedStream<O = any> = {
+export type SerializedStream = {
   __type: "stream";
-  name: string;
+  id: string;
   scope: string;
-  value: O;
 };
+
+export function createSeriazliedRef(
+  opts: Omit<SerializedRef, "__type">
+): SerializedRef {
+  return { ...opts, __type: "ref" };
+}
 
 export function createSeriazliedMemo(
   opts: Omit<SerializedMemo, "__type">
@@ -102,34 +93,18 @@ export function createSeriazliedProjection(
   return { ...opts, __type: "projection" };
 }
 
-export function createSeriazliedStore(
-  opts: Omit<SerializedStoreAccessor, "__type">
-): SerializedStoreAccessor {
-  return { ...opts, __type: "store-accessor" };
-}
-
 export function createSocketMemo<T>(source: () => T): () => T | undefined {
   // @ts-expect-error
   source.type = "memo";
   return source;
 }
 
-export function createSocketProjection<T extends object = {}>(
-  storeOrMutation: (draft: T) => void,
+export function createSocketProjection<T extends object>(
+  mutation: (draft: T) => void,
   init?: T
 ): T | undefined {
+  let state = init;
   // @ts-expect-error
-  const [store, setStore] = createStore<T>(init || {});
-  createComputed(() => setStore(produce(storeOrMutation)));
-  // @ts-expect-error
-  store.type = "projection";
-  return store;
-}
-
-export function createSocketStore<T extends object = {}>(
-  storeAccessor: () => T
-): T | undefined {
-  // @ts-expect-error
-  storeAccessor.type = "store-accessor";
-  return storeAccessor as any;
+  state[$TRACK] = mutation;
+  return state;
 }
