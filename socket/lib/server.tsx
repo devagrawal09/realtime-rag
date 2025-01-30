@@ -96,52 +96,67 @@ export class LiveSolidServer {
   }
 
   async create(id: string, name: string, input?: SerovalJSON) {
-    const [filepath, functionName] = name.split("#");
-    const module = await getManifest(import.meta.env.ROUTER_NAME).chunks[
-      filepath
-    ].import();
-    const endpoint = module[functionName];
+    try {
+      const [filepath, functionName] = name.split("#");
+      const module = await getManifest(import.meta.env.ROUTER_NAME).chunks[
+        filepath
+      ].import();
+      const endpoint = module[functionName];
 
-    if (!endpoint) throw new Error(`Endpoint ${name} not found`);
+      if (!endpoint) throw new Error(`Endpoint ${name} not found`);
 
-    const { refs, disposal } = createRoot((disposal) => {
-      const deserializedInput =
-        input &&
-        deserializeReactivePayload(input, {
-          createSocketRefConsumer: (ref) => createSocketRefConsumer(ref, this),
-          createSocketMemoConsumer: (ref) =>
-            createSocketMemoConsumer(ref, this),
-          createSocketProjectionConsumer: (ref) =>
-            createSocketProjectionConsumer(ref, this),
+      const { refs, disposal } = createRoot((disposal) => {
+        const deserializedInput =
+          input &&
+          deserializeReactivePayload(input, {
+            createSocketRefConsumer: (ref) =>
+              createSocketRefConsumer(ref, this),
+            createSocketMemoConsumer: (ref) =>
+              createSocketMemoConsumer(ref, this),
+            createSocketProjectionConsumer: (ref) =>
+              createSocketProjectionConsumer(ref, this),
+          });
+
+        let payload: any;
+        peerCtx.Provider({
+          value: this.peer,
+          // @ts-expect-error
+          children: () => (payload = endpoint(deserializedInput)),
         });
 
-      let payload: any;
-      peerCtx.Provider({
-        value: this.peer,
-        // @ts-expect-error
-        children: () => (payload = endpoint(deserializedInput)),
-      });
+        const { refs, signals, value } = serializeReactivePayload(id, payload);
+        this.send({ value, id, type: "value" });
 
-      const { refs, signals, value } = serializeReactivePayload(id, payload);
-      this.send({ value, id, type: "value" });
-      signals.forEach((signal, id) => {
-        createEffect(() => {
-          this.send({ value: toJSON(signal()), id, type: "value" });
+        const scope = id;
+        signals.forEach((signal, id) => {
+          createEffect(() => {
+            try {
+              this.send({ value: toJSON(signal()), id, type: "value" });
+            } catch (error) {
+              this.send({ error: toJSON(error), id: scope, type: "error" });
+            }
+          });
         });
-      });
 
-      return { refs, disposal };
-    });
-    this.closures.set(id, { refs, disposal });
+        return { refs, disposal };
+      });
+      this.closures.set(id, { refs, disposal });
+    } catch (error) {
+      this.send({ error: toJSON(error), id, type: "error" });
+    }
   }
 
   async invoke<I, O>(id: string, ref: SerializedRef<I, O>, input: SerovalJSON) {
-    const refFn = this.closures.get(ref.scope)!.refs!.get(ref.id)!;
-    const fnInput = fromJSON(input);
-    const arified = Array.isArray(fnInput) ? fnInput : [fnInput];
-    const response = await refFn(...arified);
-    const value = toJSON(response);
-    this.send({ id, value, type: "value" });
+    try {
+      const refFn = this.closures.get(ref.scope)!.refs!.get(ref.id)!;
+      const fnInput = fromJSON(input);
+      const arified = Array.isArray(fnInput) ? fnInput : [fnInput];
+      const response = await refFn(...arified);
+      const value = toJSON(response);
+      this.send({ id, value, type: "value" });
+    } catch (error) {
+      this.send({ id, error: toJSON(error), type: "error" });
+    }
   }
 
   dispose(id: string) {

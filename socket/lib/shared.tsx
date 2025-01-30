@@ -41,6 +41,10 @@ export type WsMessageDown =
   | {
       type: "value";
       value: SerovalJSON;
+    }
+  | {
+      type: "error";
+      error: SerovalJSON;
     };
 
 export type SerializedRef<I = any, O = any> = {
