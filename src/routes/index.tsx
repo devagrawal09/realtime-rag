@@ -1,6 +1,7 @@
 import { createAsync, type RouteSectionProps } from "@solidjs/router";
 import { Show } from "solid-js";
 import { Login, Logout } from "~/components/auth";
+import { Counter } from "~/components/counter";
 import { Invites } from "~/components/invites";
 import { PresenceHost } from "~/components/presence";
 import { TodoApp, TodosFilter } from "~/components/todos";
@@ -20,7 +21,8 @@ export default function TodoAppPage(props: RouteSectionProps) {
         when={userId()}
         fallback={
           <>
-            <h1>Welcome to Solid Socket</h1>
+            <Counter />
+            {/* <h1>Welcome to Solid Socket</h1>
             <h2 style={{ "font-weight": "normal" }}>
               The easiest and most powerful way to build realtime applications
               on top of SolidStart.
@@ -43,7 +45,7 @@ export default function TodoAppPage(props: RouteSectionProps) {
               Just open multiple windows using different browsers or devices and
               login using a different username.
             </p>
-            <Login />
+            <Login /> */}
           </>
         }
       >
