@@ -11,7 +11,6 @@ import {
   useContext,
 } from "solid-js";
 import { createStore, produce } from "solid-js/store";
-import { getManifest } from "vinxi/manifest";
 import {
   deserializeReactivePayload,
   serializeReactivePayload,
@@ -25,6 +24,8 @@ import {
   WsMessageDown,
   WsMessageUp,
 } from "./shared";
+// @ts-ignore
+import serverFnManifest from "solidstart:server-fn-manifest";
 
 const peerCtx = createContext<Peer>();
 export const usePeer = () => {
@@ -97,11 +98,10 @@ export class LiveSolidServer {
 
   async create(id: string, name: string, input?: SerovalJSON) {
     try {
-      const [filepath, functionName] = name.split("#");
-      const module = await getManifest(import.meta.env.ROUTER_NAME).chunks[
-        filepath
-      ].import();
-      const endpoint = module[functionName];
+      const [functionId] = name.split("#");
+      const serverFnInfo = serverFnManifest[functionId];
+      const fnModule = await serverFnInfo.importer();
+      const endpoint = fnModule![serverFnInfo.functionName];
 
       if (!endpoint) throw new Error(`Endpoint ${name} not found`);
 
@@ -216,7 +216,7 @@ function createSocketMemoConsumer<O>(
   server: LiveSolidServer
 ) {
   const [signal, setSignal] = createSignal(ref.initial);
-  server.observers.set(ref.id, (value) => setSignal(() => fromJSON(value)));
+  server.observers.set(ref.id, (value) => setSignal(() => fromJSON<O>(value)));
   onCleanup(() => server.observers.delete(ref.id));
   return signal;
 }

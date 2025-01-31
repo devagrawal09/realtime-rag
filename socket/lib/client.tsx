@@ -149,7 +149,6 @@ export function createEndpoint(name: string, rawInput?: any) {
     refs,
     signals,
   } = serializeReactivePayload(inputScope, rawInput);
-  // console.log({ serializedInput });
 
   const scopePromise = wsRpc({ type: "create", name, input });
 

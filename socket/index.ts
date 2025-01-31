@@ -1,23 +1,43 @@
 import { normalize } from "vinxi/lib/path";
 export { client } from "./plugin/client";
-import { server } from "./plugin/server";
 import { fileURLToPath } from "url";
-import { importsPlugin } from "./imports";
+export { importsPlugin } from "./imports";
+import { createTanStackServerFnPlugin } from "@tanstack/server-functions-plugin";
 
-export const router = {
-  name: "socket-fns",
-  type: "http",
-  base: "/_ws",
-  handler: "./socket/plugin/server-handler.ts",
-  target: "server",
-  plugins: () => [
-    server({
-      runtime: normalize(
+export const SolidSocketFnsPlugin = createTanStackServerFnPlugin({
+  // This is the ID that will be available to look up and import
+  // our server function manifest and resolve its module
+  manifestVirtualImportId: "socket:fn-manifest",
+  client: {
+    getRuntimeCode: () =>
+      `import { createServerReference } from "${normalize(
         fileURLToPath(
-          new URL("./socket/plugin/server-runtime.js", import.meta.url)
+          new URL("./socket/plugin/client-runtime.js", import.meta.url)
         )
-      ),
-    }),
-    importsPlugin(),
-  ],
-};
+      )}"`,
+    replacer: (opts) =>
+      `createServerReference(${() => {}}, '${opts.functionId}', '${
+        opts.extractedFilename
+      }')`,
+  },
+  ssr: {
+    getRuntimeCode: () =>
+      `import { createServerReference } from '${normalize(
+        fileURLToPath(
+          new URL("../dist/runtime/server-runtime.js", import.meta.url)
+        )
+      )}'`,
+    replacer: (opts) =>
+      `createServerReference(${opts.fn}, '${opts.functionId}', '${opts.extractedFilename}')`,
+  },
+  server: {
+    getRuntimeCode: () =>
+      `import { createServerReference } from '${normalize(
+        fileURLToPath(
+          new URL("../dist/runtime/server-runtime.js", import.meta.url)
+        )
+      )}'`,
+    replacer: (opts) =>
+      `createServerReference(${opts.fn}, '${opts.functionId}', '${opts.extractedFilename}')`,
+  },
+});
